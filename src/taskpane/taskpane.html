@@ -380,11 +380,13 @@
       card.appendChild(meta);
       const cb=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"Arial,sans-serif"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
-        // Use Graph API to swap categories on any email (even if not selected)
+        // Use Graph API to swap categories and archive
         if(t.emailId && window.k92Graph){
-          window.k92Graph.setCategories(t.emailId,["To be Archived"]).catch(e=>{
-            console.error("Graph setCategories failed:",e);
-            // Fallback: if currently selected, use Office.js
+          window.k92Graph.setCategories(t.emailId,["To be Archived"]).then(()=>{
+            return window.k92Graph.archiveMessage(t.emailId);
+          }).catch(e=>{
+            console.error("Graph complete failed:",e);
+            // Fallback: if currently selected, use Office.js for categories only
             if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
               (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
               removeOutlookColour();
