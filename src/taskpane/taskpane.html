@@ -686,48 +686,46 @@
       });
     }
 
-    function tryMoveItem(ewsId,toFolderXml,cb){
-      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:MoveItem>
-      <m:ToFolderId>${toFolderXml}</m:ToFolderId>
-      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
-    </m:MoveItem>
-  </soap:Body>
-</soap:Envelope>`,cb);
-    }
-
     function archiveEmail(rawId,cb){
       buildDbgPanel();
       if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
       dbgClear();
       setStatus("Archiving…");
-      const ewsId=toEwsId(rawId);
-      dbg("archiveEmail start, id="+ewsId.slice(0,40)+"...");
-      dbg("trying DistinguishedFolderId=archive...");
-      tryMoveItem(ewsId,'<t:DistinguishedFolderId Id="archive"/>',(ok,val,err)=>{
-        dbg("MoveItem (archive) result: ok="+ok+(val?" xml="+val.slice(0,300):"")+(err?" err="+JSON.stringify(err):""));
-        if(ok){
-          setStatus("Archived.",2000);
-          if(cb)cb();
-        } else {
-          dbg("DistinguishedFolderId failed, searching for Archive folder...");
-          findArchiveFolderId(fid=>{
-            if(!fid){setStatus("Archive failed — folder not found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
-            dbg("found folder id="+fid.slice(0,40)+"..., moving...");
-            tryMoveItem(ewsId,'<t:FolderId Id="'+fid+'"/>',(ok2,val2,err2)=>{
-              dbg("MoveItem (named) result: ok="+ok2+(val2?" xml="+val2.slice(0,300):"")+(err2?" err="+JSON.stringify(err2):""));
-              setStatus(ok2?"Archived.":"Archive failed — see debug log.",ok2?2000:6000);
+      dbg("archiveEmail start");
+      try{
+        var restId=rawId;
+        try{restId=Office.context.mailbox.convertToRestId(rawId,Office.MailboxEnums.RestVersion.v2_0);}catch(e){dbg("convertToRestId not available, using raw id");}
+        Office.context.mailbox.getCallbackTokenAsync({isRest:true},function(result){
+          if(result.status!==Office.AsyncResultStatus.Succeeded){
+            dbg("getCallbackToken failed: "+(result.error?result.error.message:"unknown"));
+            setStatus("Archive failed — could not get token.",4000);
+            if(cb)cb();return;
+          }
+          var token=result.value;
+          var restUrl=Office.context.mailbox.restUrl+"/v2.0/me/messages/"+encodeURIComponent(restId)+"/move";
+          dbg("REST move: "+restUrl.slice(0,100)+"...");
+          var xhr=new XMLHttpRequest();
+          xhr.open("POST",restUrl);
+          xhr.setRequestHeader("Authorization","Bearer "+token);
+          xhr.setRequestHeader("Content-Type","application/json");
+          xhr.onreadystatechange=function(){
+            if(xhr.readyState===4){
+              dbg("REST response: "+xhr.status+" "+xhr.responseText.slice(0,200));
+              if(xhr.status>=200&&xhr.status<300){
+                setStatus("Archived.",2000);
+              } else {
+                setStatus("Archive failed ("+xhr.status+") — see debug log.",6000);
+              }
               if(cb)cb();
-            });
-          });
-        }
-      });
+            }
+          };
+          xhr.send(JSON.stringify({DestinationId:"archive"}));
+        });
+      }catch(e){
+        dbg("archiveEmail error: "+e);
+        setStatus("Archive failed — see debug log.",4000);
+        if(cb)cb();
+      }
     }
 
     function removeColourByEws(rawId,cb){
