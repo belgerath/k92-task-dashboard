@@ -145,6 +145,17 @@
           <bt:String id="ActionButton.Tooltip" DefaultValue="Open the K92 Task Dashboard."/>
         </bt:LongStrings>
       </Resources>
+      <WebApplicationInfo>
+        <Id>72c1b54e-796b-4e6b-aa89-1f85502cc6b9</Id>
+        <Resource>api://belgerath.github.io/72c1b54e-796b-4e6b-aa89-1f85502cc6b9</Resource>
+        <Scopes>
+          <Scope>Mail.Read</Scope>
+          <Scope>Mail.ReadWrite</Scope>
+          <Scope>User.Read</Scope>
+          <Scope>openid</Scope>
+          <Scope>profile</Scope>
+        </Scopes>
+      </WebApplicationInfo>
     </VersionOverrides>
   </VersionOverrides>
 </OfficeApp>
