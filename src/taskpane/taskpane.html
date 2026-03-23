@@ -695,52 +695,47 @@
       dbgClear();
       setStatus("Archiving…");
       var ewsId=toEwsId(rawId);
-      dbg("archiveEmail: trying MoveItem to archive folder");
-      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:MoveItem>
-      <m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>
-      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
-    </m:MoveItem>
-  </soap:Body>
-</soap:Envelope>`,(ok,val,err)=>{
-        dbg("MoveItem result: ok="+ok);
-        if(ok&&val&&val.indexOf("ResponseClass=\"Success\"")>-1){
-          setStatus("Archived.",2000);
-          if(cb)cb();
-        } else if(ok&&val&&val.indexOf("ResponseClass=\"Error\"")>-1){
-          dbg("EWS error in response");
-          dbg("Trying named Archive folder search...");
-          findArchiveFolderId(fid=>{
-            if(!fid){setStatus("Archive failed — no Archive folder found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
-            dbg("Found folder, moving...");
-            makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:MoveItem>
-      <m:ToFolderId><t:FolderId Id="${fid}"/></m:ToFolderId>
-      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
-    </m:MoveItem>
-  </soap:Body>
-</soap:Envelope>`,(ok2,val2,err2)=>{
-              var success2=ok2&&val2&&val2.indexOf("ResponseClass=\"Success\"")>-1;
-              setStatus(success2?"Archived.":"Archive failed — see debug log.",success2?2000:6000);
-              if(cb)cb();
-            });
-          });
-        } else {
-          setStatus("Archive failed — see debug log.",4000);
-          if(cb)cb();
+      dbg("Getting EWS callback token...");
+      Office.context.mailbox.getCallbackTokenAsync(function(tokenResult){
+        if(tokenResult.status!==Office.AsyncResultStatus.Succeeded){
+          dbg("EWS token failed: "+(tokenResult.error?tokenResult.error.message:"unknown"));
+          setStatus("Cannot archive — token unavailable.",4000);
+          if(cb)cb();return;
         }
+        var token=tokenResult.value;
+        var ewsUrl=Office.context.mailbox.ewsUrl;
+        dbg("Got token. ewsUrl="+ewsUrl);
+        var soapXml='<?xml version="1.0" encoding="utf-8"?>'+
+          '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '+
+          'xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" '+
+          'xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">'+
+          '<soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>'+
+          '<soap:Body><m:MoveItem>'+
+          '<m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>'+
+          '<m:ItemIds><t:ItemId Id="'+ewsId+'"/></m:ItemIds>'+
+          '</m:MoveItem></soap:Body></soap:Envelope>';
+        dbg("Sending MoveItem via XHR...");
+        var xhr=new XMLHttpRequest();
+        xhr.open("POST",ewsUrl);
+        xhr.setRequestHeader("Authorization","Bearer "+token);
+        xhr.setRequestHeader("Content-Type","text/xml; charset=utf-8");
+        xhr.onreadystatechange=function(){
+          if(xhr.readyState===4){
+            dbg("Response: status="+xhr.status+" body="+xhr.responseText.slice(0,400));
+            if(xhr.status>=200&&xhr.status<300&&xhr.responseText.indexOf('ResponseClass="Success"')>-1){
+              setStatus("Archived.",2000);
+            } else {
+              setStatus("Archive failed ("+xhr.status+") — see debug log.",6000);
+            }
+            if(cb)cb();
+          }
+        };
+        xhr.onerror=function(){
+          dbg("XHR network error (likely CORS blocked)");
+          setStatus("Archive not available — use Backspace to archive manually.",6000);
+          if(cb)cb();
+        };
+        xhr.send(soapXml);
       });
     }
 
