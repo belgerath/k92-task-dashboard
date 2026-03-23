@@ -354,6 +354,14 @@
       card.appendChild(meta);
       const cb=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"Arial,sans-serif"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
+        // If this task's email is currently selected, swap categories
+        if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+          (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+          removeOutlookColour();
+        } else if(t.emailId){
+          // Email not selected — queue for category removal next time it's opened
+          addPending(t.emailId);
+        }
         if(!t.recurring){removeTask(t.id);}
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
@@ -626,7 +634,9 @@
 
     function removeOutlookColour(){
       if(!Office.context.mailbox.item)return;
-      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{});
+      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{
+        Office.context.mailbox.item.categories.addAsync(["To be Archived"],()=>{});
+      });
     }
 
     function applyOutlookColour(task){
@@ -788,7 +798,10 @@
       currentEmailId=item.itemId;
       document.getElementById("eSnip").textContent=currentEmailSubject;
       if(isPending(currentEmailId)){
-        Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{removePending(currentEmailId);});
+        Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{
+          Office.context.mailbox.item.categories.addAsync(["To be Archived"],()=>{});
+          removePending(currentEmailId);
+        });
       }
       const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
         tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId);
@@ -801,6 +814,27 @@
       } else {
         currentTaskId=null;mode="new";
         form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};
+        // Auto-detect manually applied Outlook categories and create a task
+        Office.context.mailbox.item.categories.getAsync(catResult=>{
+          if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
+          const catNames=catResult.value.map(c=>c.displayName);
+          const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
+          const found=catNames.find(n=>catMap[n]);
+          if(!found){renderEmail();return;}
+          const type=catMap[found];
+          const defaultDays=found==="High"?2:found==="Med"?7:14;
+          const due=new Date(localToday().getTime()+defaultDays*864e5);
+          const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
+          const autoTask={title:currentEmailSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:currentEmailId};
+          try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
+          tasks.push(autoTask);saveTasks();
+          currentTaskId=autoTask.id;
+          saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",notes:""};
+          mode="view";renderEmail();renderDash();
+          setStatus("Task auto-created from email category.",3000);
+          return;
+        });
+        return; // wait for async category check
       }
       renderEmail();
     }
