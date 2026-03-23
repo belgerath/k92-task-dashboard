@@ -1,0 +1,951 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>K92 Task Dashboard</title>
+  <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: Arial, sans-serif; font-size: 12px; background: #f8f9fa; }
+    .tabs { display: flex; border-bottom: 1px solid #ddd; background: #fff; }
+    .tab { flex: 1; padding: 9px 4px; font-size: 11px; font-weight: 500; border: none; cursor: pointer; background: transparent; color: #888; border-bottom: 2px solid transparent; margin-bottom: -1px; font-family: Arial, sans-serif; }
+    .tab.on { color: #0078D4; border-bottom: 2px solid #0078D4; background: #fff; }
+    .tc { padding: 10px; overflow-y: auto; flex: 1; display: none; }
+    .tc.active { display: block; }
+    input[type=date], input[type=text], textarea { width: 100%; padding: 5px 8px; font-size: 12px; border-radius: 7px; border: 1px solid #ccc; font-family: Arial, sans-serif; background: #fff; color: #222; }
+    textarea { resize: none; }
+    .snip { font-size: 11px; color: #555; margin-bottom: 10px; padding: 6px 8px; background: #EFF6FF; border-radius: 7px; border-left: 3px solid #0078D4; font-family: Arial, sans-serif; }
+    .ntb { width: 100%; padding: 8px; border-radius: 7px; border: 1px solid #ccc; background: #fff; color: #0078D4; font-weight: 500; font-size: 12px; cursor: pointer; font-family: Arial, sans-serif; margin-bottom: 10px; display: block; }
+    .sidebar-content { height: calc(100vh - 42px); overflow-y: auto; }
+    #pMatrix { padding: 8px; }
+    .mx-tip { position: fixed; background: #222; color: #fff; padding: 6px 9px; border-radius: 6px; font-size: 10px; pointer-events: none; display: none; max-width: 170px; z-index: 999; line-height: 1.5; word-break: break-word; }
+    #eStatus { font-size: 10px; color: #888; font-style: italic; margin-bottom: 4px; min-height: 14px; font-family: Arial, sans-serif; }
+    #dbgLog { font-size: 9px; color: #333; font-family: monospace; background: #f0f0f0; border: 1px solid #ccc; border-radius: 5px; padding: 5px; margin-bottom: 6px; max-height: 120px; overflow-y: auto; display: none; white-space: pre-wrap; word-break: break-all; }
+  </style>
+</head>
+<body>
+  <div class="tabs">
+    <button class="tab on" id="tabEmail">Email</button>
+    <button class="tab" id="tabDash">Dashboard</button>
+    <button class="tab" id="tabMatrix">Matrix</button>
+  </div>
+  <div class="sidebar-content">
+    <div class="tc active" id="pEmail">
+      <div id="eSnip" class="snip">Select an email to begin</div>
+      <div id="eStatus"></div>
+      <div id="dbgLog"></div>
+      <div id="eState"></div>
+    </div>
+    <div class="tc" id="pDash">
+      <button class="ntb" id="newTaskBtn">+ New manual task</button>
+      <div id="mForm" style="display:none"></div>
+      <div id="dContent"></div>
+    </div>
+    <div class="tc" id="pMatrix">
+      <div id="mxContent"></div>
+    </div>
+  </div>
+  <div class="mx-tip" id="mxTip"></div>
+
+  <script>
+    const TC = { task:"#0078D4", discuss:"#BA7517", waiting:"#7C3AED", delegated:"#4B5563" };
+    const TL = { task:"Task", discuss:"Discuss", waiting:"Waiting", delegated:"Delegate" };
+    const EC = "#185FA5";
+
+    // ── Debug log ─────────────────────────────────────────────
+    function dbg(msg) {
+      const el = document.getElementById("dbgLog");
+      if(!el) return;
+      el.style.display = "block";
+      el.querySelector(".dbg-text").textContent += new Date().toLocaleTimeString() + " " + msg + "\n";
+      el.querySelector(".dbg-text").scrollTop = el.querySelector(".dbg-text").scrollHeight;
+    }
+    function dbgClear() {
+      const el = document.getElementById("dbgLog");
+      if(el){ el.querySelector(".dbg-text").textContent=""; el.style.display="none"; }
+    }
+    function buildDbgPanel() {
+      const wrap = document.getElementById("dbgLog");
+      if(!wrap || wrap.children.length > 0) return;
+      const hdr = document.createElement("div");
+      hdr.style.cssText = "display:flex;justify-content:space-between;margin-bottom:3px;";
+      const lbl = document.createElement("span");
+      lbl.style.cssText = "font-size:9px;font-weight:700;color:#666;";
+      lbl.textContent = "DEBUG LOG";
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = "📋 Copy";
+      copyBtn.style.cssText = "font-size:9px;padding:1px 5px;border-radius:3px;border:1px solid #ccc;background:#fff;cursor:pointer;";
+      copyBtn.addEventListener("click", () => {
+        const text = wrap.querySelector(".dbg-text").textContent;
+        navigator.clipboard.writeText(text).then(() => { copyBtn.textContent = "✓ Copied!"; setTimeout(() => copyBtn.textContent = "📋 Copy", 2000); });
+      });
+      hdr.appendChild(lbl); hdr.appendChild(copyBtn); wrap.appendChild(hdr);
+      const pre = document.createElement("pre");
+      pre.className = "dbg-text";
+      pre.style.cssText = "font-size:9px;max-height:100px;overflow-y:auto;margin:0;white-space:pre-wrap;word-break:break-all;";
+      wrap.appendChild(pre);
+    }
+
+    // ── Status message ────────────────────────────────────────
+    function setStatus(msg, dur) {
+      const s = document.getElementById("eStatus");
+      if(s) { s.textContent = msg; if(dur) setTimeout(()=>{ if(s.textContent===msg) s.textContent=""; }, dur); }
+    }
+
+    // ── Pending colour removal ────────────────────────────────
+    function loadPending(){try{return JSON.parse(localStorage.getItem('k92pending')||'[]');}catch(e){return[];}}
+    function savePending(p){try{localStorage.setItem('k92pending',JSON.stringify(p));}catch(e){}}
+    function addPending(emailId){if(!emailId)return;const p=loadPending();if(!p.includes(emailId)){p.push(emailId);savePending(p);}}
+    function removePending(emailId){const p=loadPending().filter(id=>id!==emailId);savePending(p);}
+    function isPending(emailId){return loadPending().includes(emailId);}
+
+    // ── EWS ID — in Classic Outlook desktop itemId is already EWS format
+    function toEwsId(id) { return id; }
+
+    // ── Date helpers ──────────────────────────────────────────
+    function localToday() { const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+    function daysFromDate(d) { if(!d)return 5; const p=d.split('-').map(Number); return Math.max(0,Math.round((new Date(p[0],p[1]-1,p[2])-localToday())/864e5)); }
+    function fmtD(d) { if(!d)return"—"; const p=d.split("-"); if(p.length!==3)return d; return parseInt(p[2])+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1])-1]+" "+p[0]; }
+    function dateStr(dt) { return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+    const pri = d => d<=2?{l:"High",c:"#DC2626",lbl:"red"}:d<=7?{l:"Medium",c:"#EA580C",lbl:"orange"}:{l:"Low",c:"#16A34A",lbl:"green"};
+
+    // ── Gradient colour for matrix ────────────────────────────
+    // importance 1-5, days 0-30+. Top-left (imp=5, days=0) = red. Bottom-right (imp=1, days=30) = green.
+    function bubbleColor(importance, days) {
+      const imp = Math.max(1, Math.min(5, importance||3));
+      const urgency = 1 - Math.min(days||0, 30) / 30; // 1=due now, 0=30+ days
+      const impScore = (imp - 1) / 4; // 0=imp1, 1=imp5
+      const combined = urgency * 0.5 + impScore * 0.5; // 0=low urgency+low imp, 1=high urgency+high imp
+      const hue = (1 - combined) * 118; // 118=green, 0=red
+      const sat = 72 + combined * 15;
+      const lig = 42 + (1 - combined) * 10;
+      return `hsl(${hue},${sat}%,${lig}%)`;
+    }
+
+    // ── DOM helpers ───────────────────────────────────────────
+    function el(tag,styles,props) { const e=document.createElement(tag); if(styles)Object.assign(e.style,styles); if(props)Object.assign(e,props); return e; }
+    function mkLbl(text) { return el("div",{fontSize:"11px",fontWeight:"700",color:"#555",letterSpacing:".04em",fontFamily:"Arial,sans-serif",marginBottom:"4px",marginTop:"8px",display:"block"},{textContent:text}); }
+    function mkInput(type,id,placeholder) { const i=document.createElement("input"); Object.assign(i.style,{width:"100%",padding:"5px 8px",fontSize:"12px",borderRadius:"7px",border:"1px solid #ccc",background:"#fff",color:"#222",fontFamily:"Arial,sans-serif",display:"block"}); i.type=type; if(id)i.id=id; if(placeholder)i.placeholder=placeholder; return i; }
+    function mkTextarea(id,placeholder,rows) { const t=document.createElement("textarea"); Object.assign(t.style,{width:"100%",padding:"5px 8px",fontSize:"12px",borderRadius:"7px",border:"1px solid #ccc",background:"#fff",color:"#222",fontFamily:"Arial,sans-serif",resize:"none",display:"block"}); t.rows=rows||2; if(id)t.id=id; if(placeholder)t.placeholder=placeholder; return t; }
+    function mkPill(text,bg,color,border) { return el("div",{background:bg,color:color,border:"1px solid "+border,borderRadius:"7px",padding:"6px 9px",fontSize:"11px",marginTop:"8px",lineHeight:"1.4",fontFamily:"Arial,sans-serif"},{textContent:text}); }
+    function mkBtn(text,bg,color,border) { return el("button",{width:"100%",padding:"8px",borderRadius:"7px",border:border||"none",background:bg,color:color,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"Arial,sans-serif",marginBottom:"4px",display:"block"},{textContent:text}); }
+    function sType(b,on) { const c=TC[b.dataset.type]||"#0078D4"; Object.assign(b.style,{height:"30px",width:"100%",fontSize:"11px",fontFamily:"Arial,sans-serif",borderRadius:"7px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px",border:on?"2px solid "+c:"1px solid #ccc",background:on?c:"#f5f5f5",color:on?"#fff":"#555",fontWeight:on?"700":"400"}); }
+    function sEff(b,on) { Object.assign(b.style,{height:"26px",fontSize:"11px",fontFamily:"Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 3px",border:on?"2px solid "+EC:"1px solid #ccc",background:on?EC:"#f5f5f5",color:on?"#fff":"#555",fontWeight:on?"700":"400"}); }
+    function sImp(b,on) {
+      const val=parseInt(b.dataset.imp);
+      const c=val>=4?"#DC2626":val===3?"#EA580C":"#16A34A";
+      Object.assign(b.style,{height:"26px",fontSize:"11px",fontFamily:"Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",padding:"0 2px",border:on?"2px solid "+c:"1px solid #ccc",background:on?c:"#f5f5f5",color:on?"#fff":"#555",fontWeight:on?"700":"400"});
+    }
+    function mkTypeGrid(cur,cb) {
+      const g=el("div",{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px"});
+      Object.keys(TL).forEach(t=>{ const b=el("button",{},{textContent:TL[t]}); b.dataset.type=t; sType(b,t===cur); b.addEventListener("click",()=>{ g.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===t)); if(cb)cb(t); }); g.appendChild(b); });
+      return g;
+    }
+    function mkEffortRow(cur,onSelect) {
+      const r=el("div",{display:"flex",gap:"4px"});
+      ["Quick","Medium","Deep"].forEach(e=>{ const b=el("button",{},{textContent:e}); b.dataset.e=e; sEff(b,!!cur&&e===cur); b.addEventListener("click",()=>{ r.querySelectorAll("button").forEach(x=>sEff(x,x.dataset.e===e)); if(onSelect)onSelect(e); }); r.appendChild(b); });
+      return r;
+    }
+    function mkImportanceRow(cur, onSelect) {
+      // 1=lowest, 5=highest. No default pre-selected.
+      const wrap = el("div",{});
+      const r = el("div",{display:"flex",gap:"3px"});
+      for(let v=1;v<=5;v++){
+        const b=el("button",{},{textContent:v});
+        b.dataset.imp=String(v);
+        sImp(b, cur!==null && cur===v);
+        b.addEventListener("click",()=>{
+          r.querySelectorAll("button").forEach(x=>sImp(x,parseInt(x.dataset.imp)===v));
+          if(onSelect)onSelect(v);
+        });
+        r.appendChild(b);
+      }
+      const hint=el("div",{fontSize:"9px",color:"#aaa",fontFamily:"Arial,sans-serif",marginTop:"2px",display:"flex",justifyContent:"space-between"});
+      hint.appendChild(el("span",{},{textContent:"Low"}));
+      hint.appendChild(el("span",{},{textContent:"High"}));
+      wrap.appendChild(r);
+      wrap.appendChild(hint);
+      return wrap;
+    }
+    function mkTaskColourPill() { return el("div",{borderRadius:"7px",padding:"6px 9px",fontSize:"11px",marginTop:"8px",lineHeight:"1.4",fontFamily:"Arial,sans-serif",border:"1px solid #ddd",background:"#f5f5f5",color:"#555"},{textContent:"Pick a due date to see Outlook tag colour"}); }
+    function updateTaskColourPill(pill,dueDate) {
+      if(!dueDate){Object.assign(pill.style,{background:"#f5f5f5",color:"#555",border:"1px solid #ddd"});pill.textContent="Pick a due date to see Outlook tag colour";return;}
+      const d=daysFromDate(dueDate),p=pri(d);
+      const configs={"#DC2626":["#FEE2E2","#991b1b","#FCA5A5"],"#EA580C":["#FFEDD5","#9a3412","#FED7AA"],"#16A34A":["#DCFCE7","#166534","#86EFAC"]};
+      const c=configs[p.c]||configs["#16A34A"];
+      Object.assign(pill.style,{background:c[0],color:c[1],border:"1px solid "+c[2]});
+      pill.textContent="Will be tagged "+p.lbl+" in Outlook ("+d+" day"+(d===1?"":"s")+" away — "+p.l+" priority)";
+    }
+    function buildFields(type,form,container) {
+      container.innerHTML="";
+      if(type==="waiting"){
+        container.appendChild(mkLbl("EXPECTED BY")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("WAITING ON")); const fw=mkInput("text","fWho","Person / organisation"); fw.value=form.waitingWho||""; fw.addEventListener("input",e=>form.waitingWho=e.target.value); container.appendChild(fw);
+        container.appendChild(mkLbl("WHAT ARE YOU WAITING FOR?")); const fn=mkTextarea("fNotes","Describe what you need..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkPill("Will be tagged purple in Outlook","#EEEDFE","#3C3489","#AFA9EC"));
+      } else if(type==="delegated"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("DELEGATE TO")); const fw=mkInput("text","fWho","Team member name"); fw.value=form.delegateTo||""; fw.addEventListener("input",e=>form.delegateTo=e.target.value); container.appendChild(fw);
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkPill("Will be tagged gray in Outlook","#f0f0f0","#555","#ddd"));
+      } else if(type==="discuss"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkPill("Will appear in Discuss section","#FAEEDA","#633806","#FAC775"));
+      } else if(type==="task"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value;
+        const pill=mkTaskColourPill();
+        fd.addEventListener("change",e=>{form.dueDate=e.target.value;updateTaskColourPill(pill,form.dueDate);}); container.appendChild(fd);
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("EFFORT")); const er=mkEffortRow(form.effort||"",v=>form.effort=v); container.appendChild(er);
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(pill); if(form.dueDate)updateTaskColourPill(pill,form.dueDate);
+      }
+    }
+
+    // ── Task store ────────────────────────────────────────────
+    function loadTasks(){try{return JSON.parse(localStorage.getItem('k92tasks')||'[]');}catch(e){return[];}}
+    function saveTasks(){try{localStorage.setItem('k92tasks',JSON.stringify(tasks));}catch(e){}}
+    const tasks=loadTasks();
+    let nid=tasks.length>0?Math.max(...tasks.map(t=>t.id))+1:1;
+    function removeTask(id){const i=tasks.findIndex(t=>t.id===id);if(i>-1){tasks.splice(i,1);saveTasks();}}
+
+    // ── Recurring tasks ───────────────────────────────────────
+    function getRecurringTasks(){
+      const today=localToday(),y=today.getFullYear(),m=today.getMonth(),recurring=[];
+      function addIfDue(title,dueDate,effort){
+        const days=Math.round((dueDate-today)/864e5);
+        if(days>=0&&days<=7)recurring.push({id:"rec_"+title.replace(/\s/g,"_")+"_"+dateStr(dueDate),title,days,type:"task",effort:effort||"Medium",importance:3,dueDate:dateStr(dueDate),recurring:true});
+      }
+      const lastDay=new Date(y,m+1,0);
+      addIfDue("Canada Payroll — Review & Release",new Date(y,m,15),"Quick");
+      addIfDue("Canada Payroll — Review & Release",lastDay,"Quick");
+      addIfDue("Australia Payroll — Review & Release",new Date(y,m,15),"Quick");
+      addIfDue("Australia Payroll — Review & Release",lastDay,"Quick");
+      addIfDue("Monthly Cost Report",new Date(y,m,8),"Deep");
+      addIfDue("Monthly Cash Flow Model",new Date(y,m,9),"Deep");
+      [[2,31],[5,30],[8,30]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Calculation",new Date(y,mo,day),"Medium"));
+      [[3,30],[6,31],[9,31]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Payment",new Date(y,mo,day),"Quick"));
+      return recurring;
+    }
+
+    const priColor=d=>d<=2?"#DC2626":d<=7?"#EA580C":"#16A34A";
+    const priLabel=d=>d<=2?"High":d<=7?"Medium":"Low";
+    let expSec="";
+
+    // ── Flagged emails (EWS) ──────────────────────────────────
+    let flaggedEmails=[];
+    let flagsLoading=false;
+
+    function buildFlaggedEwsRequest(){
+      return `<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:FindItem Traversal="Shallow">
+      <m:ItemShape>
+        <t:BaseShape>IdOnly</t:BaseShape>
+        <t:AdditionalProperties>
+          <t:FieldURI FieldURI="item:Subject"/>
+          <t:FieldURI FieldURI="item:DateTimeReceived"/>
+        </t:AdditionalProperties>
+      </m:ItemShape>
+      <m:Restriction>
+        <t:IsEqualTo>
+          <t:ExtendedFieldURI PropertyTag="0x1090" PropertyType="Integer"/>
+          <t:FieldURIOrConstant><t:Constant Value="2"/></t:FieldURIOrConstant>
+        </t:IsEqualTo>
+      </m:Restriction>
+      <m:SortOrder>
+        <t:FieldOrder Order="Descending">
+          <t:FieldURI FieldURI="item:DateTimeReceived"/>
+        </t:FieldOrder>
+      </m:SortOrder>
+      <m:ParentFolderIds>
+        <t:DistinguishedFolderId Id="inbox"/>
+      </m:ParentFolderIds>
+    </m:FindItem>
+  </soap:Body>
+</soap:Envelope>`;
+    }
+
+    function getEwsEl(parent,localName){
+      let r=parent.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types',localName);
+      if(r&&r.length>0)return r;
+      r=parent.getElementsByTagName('t:'+localName);
+      if(r&&r.length>0)return r;
+      return parent.getElementsByTagName(localName);
+    }
+
+    function parseFlaggedEmails(xml){
+      try{
+        const doc=new DOMParser().parseFromString(xml,'text/xml');
+        const results=[];
+        const items=getEwsEl(doc,'Message');
+        for(let i=0;i<items.length;i++){
+          const item=items[i];
+          const idEls=getEwsEl(item,'ItemId');
+          const subjEls=getEwsEl(item,'Subject');
+          const dateEls=getEwsEl(item,'DateTimeReceived');
+          if(!idEls||!idEls[0])continue;
+          const received=dateEls&&dateEls[0]?new Date(dateEls[0].textContent):null;
+          const daysAgo=received?Math.floor((new Date()-received)/864e5):null;
+          results.push({itemId:idEls[0].getAttribute('Id'),subject:subjEls&&subjEls[0]?subjEls[0].textContent:'No subject',receivedDate:received,daysAgo:daysAgo});
+        }
+        return results;
+      }catch(e){return[];}
+    }
+
+    function loadFlaggedEmails(cb){
+      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){if(cb)cb();return;}
+      flagsLoading=true;renderDash();
+      Office.context.mailbox.makeEwsRequestAsync(buildFlaggedEwsRequest(),result=>{
+        flagsLoading=false;
+        flaggedEmails=result.status===Office.AsyncResultStatus.Succeeded?parseFlaggedEmails(result.value):[];
+        if(cb)cb();else renderDash();
+      });
+    }
+
+    function flagCard(f){
+      const card=el("div",{padding:"8px 9px",background:"#fff",border:"1px solid #ddd",borderRadius:"7px",marginBottom:"3px",borderLeft:"3px solid #CA8A04"});
+      card.addEventListener("mouseenter",()=>card.style.background="#f8f8f8");
+      card.addEventListener("mouseleave",()=>card.style.background="#fff");
+      card.appendChild(el("div",{fontSize:"11px",fontWeight:"600",color:"#222",lineHeight:"1.3",marginBottom:"3px",fontFamily:"Arial,sans-serif"},{textContent:f.subject}));
+      const meta=el("div",{marginBottom:"5px"});
+      if(f.daysAgo!==null){
+        const label=f.daysAgo===0?"Received today":f.daysAgo===1?"Received yesterday":"Received "+f.daysAgo+"d ago";
+        meta.appendChild(el("span",{fontSize:"10px",color:"#888",fontFamily:"Arial,sans-serif"},{textContent:label}));
+      }
+      card.appendChild(meta);
+      const br=el("div",{display:"flex",justifyContent:"flex-end"});
+      const openBtn=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #ddd",background:"#f5f5f5",color:"#333",fontFamily:"Arial,sans-serif"},{textContent:"Open email"});
+      openBtn.addEventListener("click",()=>{try{Office.context.mailbox.displayMessageForm(f.itemId);}catch(e){}});
+      br.appendChild(openBtn);card.appendChild(br);
+      return card;
+    }
+
+    // ── Task cards ────────────────────────────────────────────
+    function tCard(t){
+      const c=priColor(t.days),dl=t.days<=1?"Due today":t.days+"d left";
+      const card=el("div",{padding:"8px 9px",background:"#fff",border:"1px solid #ddd",borderRadius:"7px",marginBottom:"3px",borderLeft:"3px solid "+c});
+      card.addEventListener("mouseenter",()=>card.style.background="#f8f8f8");
+      card.addEventListener("mouseleave",()=>card.style.background="#fff");
+      card.appendChild(el("div",{fontSize:"11px",fontWeight:"600",color:"#222",lineHeight:"1.3",marginBottom:"3px",fontFamily:"Arial,sans-serif"},{textContent:t.title}));
+      const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"5px"});
+      meta.appendChild(el("span",{fontSize:"10px",fontWeight:"600",color:c,fontFamily:"Arial,sans-serif"},{textContent:dl}));
+      if(t.importance)meta.appendChild(el("span",{fontSize:"10px",padding:"1px 5px",borderRadius:"4px",background:"#f0f0f0",color:"#555",fontFamily:"Arial,sans-serif"},{textContent:"P"+t.importance}));
+      if(t.effort)meta.appendChild(el("span",{fontSize:"10px",padding:"1px 5px",borderRadius:"4px",background:"#f0f0f0",color:"#555",fontFamily:"Arial,sans-serif"},{textContent:t.effort}));
+      if(t.recurring)meta.appendChild(el("span",{fontSize:"10px",padding:"1px 5px",borderRadius:"4px",background:"#EFF6FF",color:"#1e40af",fontFamily:"Arial,sans-serif"},{textContent:"recurring"}));
+      if(t.type==="delegated"&&t.who)meta.appendChild(el("span",{fontSize:"10px",padding:"1px 5px",borderRadius:"4px",background:"#f0f0f0",color:"#555",fontFamily:"Arial,sans-serif"},{textContent:"→ "+t.who}));
+      if(t.type==="waiting"&&t.who)meta.appendChild(el("span",{fontSize:"10px",padding:"1px 5px",borderRadius:"4px",background:"#EEEDFE",color:"#3C3489",fontFamily:"Arial,sans-serif"},{textContent:"waiting: "+t.who}));
+      card.appendChild(meta);
+      const cb=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"Arial,sans-serif"},{textContent:"✓ Complete"});
+      cb.addEventListener("click",()=>{
+        const emailToArchive=t.emailId;
+        if(!t.recurring){removeTask(t.id);}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        renderDash();
+        if(emailToArchive){addPending(emailToArchive);removeColourByEws(emailToArchive);archiveEmail(emailToArchive,()=>renderDash());}
+      });
+      const br=el("div",{display:"flex",justifyContent:"flex-end"});br.appendChild(cb);card.appendChild(br);
+      return card;
+    }
+
+    // ── Section header ────────────────────────────────────────
+    function secH(id,color,label,list,cardFn){
+      const wrap=document.createElement("div"),open=expSec===id;
+      const hdr=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"6px 8px",borderRadius:"7px",cursor:"pointer",border:"1px solid #ddd",background:"#fff",marginBottom:"3px"});
+      const left=el("div",{display:"flex",alignItems:"center",gap:"7px"});
+      left.appendChild(el("div",{width:"9px",height:"9px",borderRadius:"50%",background:color,flexShrink:"0"}));
+      left.appendChild(el("span",{fontSize:"11px",fontWeight:"600",color:"#222",fontFamily:"Arial,sans-serif"},{textContent:label}));
+      hdr.appendChild(left);
+      const right=el("div",{display:"flex",alignItems:"center",gap:"6px"});
+      right.appendChild(el("span",{color:"#fff",borderRadius:"10px",padding:"1px 7px",fontSize:"10px",fontWeight:"700",background:color,fontFamily:"Arial,sans-serif"},{textContent:list.length}));
+      right.appendChild(el("span",{fontSize:"10px",color:"#aaa",fontFamily:"Arial,sans-serif"},{textContent:open?"▲":"▼"}));
+      hdr.appendChild(right);
+      hdr.addEventListener("click",()=>{expSec=expSec===id?null:id;renderDash();});
+      wrap.appendChild(hdr);
+      if(open){const cards=el("div",{marginBottom:"4px"});list.forEach(t=>cards.appendChild((cardFn||tCard)(t)));wrap.appendChild(cards);}
+      return wrap;
+    }
+
+    function addST(dc,text,extra){
+      const row=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"10px 0 5px"});
+      row.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#888",letterSpacing:".07em",fontFamily:"Arial,sans-serif"},{textContent:text}));
+      if(extra)row.appendChild(extra);
+      dc.appendChild(row);
+    }
+
+    function renderDash(){
+      const dc=document.getElementById("dContent");dc.innerHTML="";
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.days===r.days));
+      const allTasks=[...tasks,...rec];
+      const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting");
+      addST(dc,"MY ACTION ITEMS");
+      dc.appendChild(secH("high","#DC2626","High priority",mine.filter(t=>priLabel(t.days)==="High")));
+      dc.appendChild(secH("medium","#EA580C","Medium priority",mine.filter(t=>priLabel(t.days)==="Medium")));
+      dc.appendChild(secH("low","#16A34A","Low priority",mine.filter(t=>priLabel(t.days)==="Low")));
+      addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",disc));
+      addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",del));dc.appendChild(secH("waiting","#7C3AED","Waiting",wait));
+      const refreshBtn=el("button",{fontSize:"10px",padding:"1px 7px",borderRadius:"4px",border:"1px solid #ddd",background:"#fff",color:"#555",cursor:"pointer",fontFamily:"Arial,sans-serif"},{textContent:"↻ Refresh"});
+      refreshBtn.addEventListener("click",()=>loadFlaggedEmails(renderDash));
+      addST(dc,"FOLLOW UP FLAGS",refreshBtn);
+      if(flagsLoading){dc.appendChild(el("div",{fontSize:"11px",color:"#888",fontFamily:"Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for flagged emails…"}));}
+      else{dc.appendChild(secH("flags","#CA8A04","Flagged emails",flaggedEmails,flagCard));}
+    }
+    renderDash();
+
+    // ── Matrix tab ────────────────────────────────────────────
+    let mxFilters={task:true,discuss:true,waiting:true,delegated:true};
+
+    function renderMatrix(){
+      const mc=document.getElementById("mxContent");mc.innerHTML="";
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.days===r.days));
+      const allTasks=[...tasks,...rec];
+
+      // Filter toggles
+      const toggleRow=el("div",{display:"flex",gap:"5px",marginBottom:"8px",flexWrap:"wrap"});
+      Object.keys(TL).forEach(type=>{
+        const on=mxFilters[type];
+        const col=TC[type];
+        const btn=el("button",{
+          padding:"3px 8px",borderRadius:"12px",fontSize:"10px",cursor:"pointer",fontWeight:"600",
+          fontFamily:"Arial,sans-serif",border:"1.5px solid "+col,
+          background:on?col:"#fff",color:on?"#fff":col
+        },{textContent:TL[type]});
+        btn.addEventListener("click",()=>{
+          mxFilters[type]=!mxFilters[type];
+          renderMatrix();
+        });
+        toggleRow.appendChild(btn);
+      });
+      mc.appendChild(toggleRow);
+
+      const visible=allTasks.filter(t=>mxFilters[t.type]);
+
+      if(!visible.length){
+        mc.appendChild(el("div",{fontSize:"11px",color:"#888",padding:"20px 0",textAlign:"center",fontFamily:"Arial,sans-serif"},{textContent:"No tasks to display — add tasks or enable more types above."}));
+        return;
+      }
+
+      // SVG dimensions
+      const W=290,H=300,PL=30,PR=12,PT=14,PB=46;
+      const PW=W-PL-PR,PH=H-PT-PB;
+      const maxDays=30;
+      const effortR={Quick:7,Medium:11,Deep:15};
+
+      // Y axis: 5 levels, evenly spaced
+      function yPos(imp){ const i=Math.max(1,Math.min(5,imp||3)); return PT+PH*(1-(i-1)/4); }
+      function xPos(days){ return PL+Math.min((days||0)/maxDays,1)*PW; }
+
+      const ns="http://www.w3.org/2000/svg";
+      const svg=document.createElementNS(ns,"svg");
+      svg.setAttribute("viewBox","0 0 "+W+" "+H);
+      svg.setAttribute("width","100%");
+      svg.style.display="block";
+
+      // Soft background quadrants
+      function rect(x,y,w,h,fill){
+        const r=document.createElementNS(ns,"rect");
+        r.setAttribute("x",x);r.setAttribute("y",y);r.setAttribute("width",w);r.setAttribute("height",h);
+        r.setAttribute("fill",fill);r.setAttribute("rx","2");
+        svg.appendChild(r);
+      }
+      const halfX=xPos(15),midY=yPos(3);
+      rect(PL,PT,halfX-PL,midY-PT,"#FFF1F1");        // top-left: high imp, urgent — red tint
+      rect(halfX,PT,W-PR-halfX,midY-PT,"#FFFBF0");   // top-right: high imp, not urgent — amber tint
+      rect(PL,midY,halfX-PL,PT+PH-midY,"#FFFBF0");   // bottom-left: low imp, urgent — amber tint
+      rect(halfX,midY,W-PR-halfX,PT+PH-midY,"#F0FFF4"); // bottom-right: low imp, not urgent — green tint
+
+      // Dashed grid lines
+      [7,14,21].forEach(d=>{
+        const line=document.createElementNS(ns,"line");
+        line.setAttribute("x1",xPos(d));line.setAttribute("y1",PT);
+        line.setAttribute("x2",xPos(d));line.setAttribute("y2",PT+PH);
+        line.setAttribute("stroke","#ddd");line.setAttribute("stroke-width","1");
+        line.setAttribute("stroke-dasharray","3,3");svg.appendChild(line);
+      });
+      for(let i=1;i<=5;i++){
+        const line=document.createElementNS(ns,"line");
+        line.setAttribute("x1",PL);line.setAttribute("y1",yPos(i));
+        line.setAttribute("x2",W-PR);line.setAttribute("y2",yPos(i));
+        line.setAttribute("stroke","#ddd");line.setAttribute("stroke-width","1");
+        svg.appendChild(line);
+      }
+
+      // Axes
+      const xa=document.createElementNS(ns,"line");
+      xa.setAttribute("x1",PL);xa.setAttribute("y1",PT+PH);xa.setAttribute("x2",W-PR);xa.setAttribute("y2",PT+PH);
+      xa.setAttribute("stroke","#bbb");xa.setAttribute("stroke-width","1.5");svg.appendChild(xa);
+      const ya=document.createElementNS(ns,"line");
+      ya.setAttribute("x1",PL);ya.setAttribute("y1",PT);ya.setAttribute("x2",PL);ya.setAttribute("y2",PT+PH);
+      ya.setAttribute("stroke","#bbb");ya.setAttribute("stroke-width","1.5");svg.appendChild(ya);
+
+      // Y axis labels (1–5)
+      for(let i=1;i<=5;i++){
+        const t=document.createElementNS(ns,"text");
+        t.setAttribute("x",PL-4);t.setAttribute("y",yPos(i)+4);
+        t.setAttribute("text-anchor","end");t.setAttribute("font-size","9");
+        t.setAttribute("fill","#888");t.setAttribute("font-family","Arial,sans-serif");
+        t.textContent=i;svg.appendChild(t);
+      }
+
+      // X axis labels
+      [[0,"Now"],[7,"7d"],[14,"14d"],[21,"21d"],[30,"30+"]].forEach(([d,label])=>{
+        const t=document.createElementNS(ns,"text");
+        t.setAttribute("x",xPos(d));t.setAttribute("y",PT+PH+12);
+        t.setAttribute("text-anchor","middle");t.setAttribute("font-size","9");
+        t.setAttribute("fill","#888");t.setAttribute("font-family","Arial,sans-serif");
+        t.textContent=label;svg.appendChild(t);
+      });
+
+      // Axis titles
+      const xt=document.createElementNS(ns,"text");
+      xt.setAttribute("x",PL+PW/2);xt.setAttribute("y",H-4);
+      xt.setAttribute("text-anchor","middle");xt.setAttribute("font-size","9");
+      xt.setAttribute("fill","#aaa");xt.setAttribute("font-family","Arial,sans-serif");
+      xt.textContent="Days to due date";svg.appendChild(xt);
+
+      const yt=document.createElementNS(ns,"text");
+      yt.setAttribute("transform","rotate(-90)");
+      yt.setAttribute("x",-(PT+PH/2));yt.setAttribute("y",9);
+      yt.setAttribute("text-anchor","middle");yt.setAttribute("font-size","9");
+      yt.setAttribute("fill","#aaa");yt.setAttribute("font-family","Arial,sans-serif");
+      yt.textContent="Importance";svg.appendChild(yt);
+
+      // Corner labels
+      function cornerLabel(x,y,text,anchor){
+        const t=document.createElementNS(ns,"text");
+        t.setAttribute("x",x);t.setAttribute("y",y);
+        t.setAttribute("text-anchor",anchor);t.setAttribute("font-size","8");
+        t.setAttribute("fill","#ccc");t.setAttribute("font-family","Arial,sans-serif");
+        t.textContent=text;svg.appendChild(t);
+      }
+      cornerLabel(PL+3,PT+10,"Do first","start");
+      cornerLabel(W-PR-3,PT+10,"Schedule","end");
+      cornerLabel(PL+3,PT+PH-6,"Delegate","start");
+      cornerLabel(W-PR-3,PT+PH-6,"Drop/defer","end");
+
+      // Bubbles — draw with slight jitter to separate overlapping
+      const tip=document.getElementById("mxTip");
+      // Group by position to apply smarter jitter
+      const positions={};
+      visible.forEach((t,idx)=>{
+        const imp=t.importance||3;
+        const days=t.days||0;
+        const key=Math.round(xPos(days))+"_"+Math.round(yPos(imp));
+        if(!positions[key])positions[key]=[];
+        positions[key].push(idx);
+      });
+
+      visible.forEach((t,idx)=>{
+        const imp=t.importance||3;
+        const days=t.days||0;
+        const r=effortR[t.effort]||9;
+        const col=bubbleColor(imp,days);
+        const key=Math.round(xPos(days))+"_"+Math.round(yPos(imp));
+        const group=positions[key];
+        const pos=group.indexOf(idx);
+        const total=group.length;
+        // Spiral jitter for groups
+        const angle=(pos/total)*2*Math.PI;
+        const jdist=total>1?(r*0.8):0;
+        const jx=Math.cos(angle)*jdist;
+        const jy=Math.sin(angle)*jdist;
+        const cx=xPos(days)+jx;
+        const cy=yPos(imp)+jy;
+
+        const circle=document.createElementNS(ns,"circle");
+        circle.setAttribute("cx",cx);circle.setAttribute("cy",cy);circle.setAttribute("r",r);
+        circle.setAttribute("fill",col);circle.setAttribute("fill-opacity","0.82");
+        circle.setAttribute("stroke","rgba(255,255,255,0.6)");circle.setAttribute("stroke-width","1.5");
+        circle.style.cursor="pointer";
+        circle.style.transition="fill-opacity 0.15s";
+
+        circle.addEventListener("mouseenter",(e)=>{
+          circle.setAttribute("fill-opacity","1");
+          tip.style.display="block";
+          const label=t.title.length>42?t.title.slice(0,42)+"…":t.title;
+          const impLabel=t.importance?"P"+t.importance:"—";
+          tip.innerHTML="<b>"+label+"</b><br>"+
+            (TL[t.type]||t.type)+" · Importance: "+impLabel+"<br>"+
+            (days===0?"Due today":days+"d left")+
+            (t.effort?" · "+t.effort:"")+(t.recurring?" · recurring":"");
+        });
+        circle.addEventListener("mousemove",(e)=>{
+          const vw=window.innerWidth;
+          const tx=e.clientX+14;
+          tip.style.left=(tx+170>vw?e.clientX-180:tx)+"px";
+          tip.style.top=(e.clientY-12)+"px";
+        });
+        circle.addEventListener("mouseleave",()=>{
+          circle.setAttribute("fill-opacity","0.82");
+          tip.style.display="none";
+        });
+        circle.addEventListener("click",()=>{
+          if(t.emailId){try{Office.context.mailbox.displayMessageForm(t.emailId);}catch(e){}}
+        });
+        svg.appendChild(circle);
+      });
+
+      mc.appendChild(svg);
+
+      // Gradient legend bar
+      const legWrap=el("div",{marginTop:"4px",padding:"0 2px"});
+      const gradBar=el("div",{height:"7px",borderRadius:"4px",background:"linear-gradient(to right, #16A34A, #84CC16, #EAB308, #F97316, #DC2626)",marginBottom:"3px"});
+      legWrap.appendChild(gradBar);
+      const gradLabels=el("div",{display:"flex",justifyContent:"space-between"});
+      gradLabels.appendChild(el("span",{fontSize:"9px",color:"#888",fontFamily:"Arial,sans-serif"},{textContent:"Low urgency"}));
+      gradLabels.appendChild(el("span",{fontSize:"9px",color:"#888",fontFamily:"Arial,sans-serif"},{textContent:"High urgency"}));
+      legWrap.appendChild(gradLabels);
+      legWrap.appendChild(el("div",{fontSize:"9px",color:"#aaa",fontFamily:"Arial,sans-serif",marginTop:"4px"},{textContent:"Bubble size = effort  ·  hover for details  ·  click to open email"}));
+      mc.appendChild(legWrap);
+    }
+
+    // ── EWS helpers ───────────────────────────────────────────
+    function makeEwsCall(xml,cb){
+      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){if(cb)cb(false);return;}
+      Office.context.mailbox.makeEwsRequestAsync(xml,r=>{if(cb)cb(r.status===Office.AsyncResultStatus.Succeeded,r.value,r.error);});
+    }
+
+    function getItemDetails(rawId,cb){
+      const ewsId=toEwsId(rawId);
+      dbg("getItemDetails: rawId="+rawId.slice(0,40)+"...");
+      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:GetItem>
+      <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
+      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
+    </m:GetItem>
+  </soap:Body>
+</soap:Envelope>`,(ok,val,err)=>{
+        dbg("getItemDetails result: ok="+ok+(err?" err="+JSON.stringify(err):""));
+        if(!ok){cb(null,null);return;}
+        try{
+          const doc=new DOMParser().parseFromString(val,'text/xml');
+          const ids=doc.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types','ItemId');
+          if(ids&&ids.length>0){
+            dbg("getItemDetails: got id+changekey ok");
+            cb(ids[0].getAttribute('Id'),ids[0].getAttribute('ChangeKey'));
+          } else {
+            dbg("getItemDetails: no ItemId in response. XML="+val.slice(0,200));
+            cb(null,null);
+          }
+        }catch(e){dbg("getItemDetails parse error: "+e);cb(null,null);}
+      });
+    }
+
+    function findArchiveFolderId(cb){
+      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:FindFolder Traversal="Deep">
+      <m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties><t:FieldURI FieldURI="folder:DisplayName"/></t:AdditionalProperties></m:FolderShape>
+      <m:Restriction>
+        <t:IsEqualTo>
+          <t:FieldURI FieldURI="folder:DisplayName"/>
+          <t:FieldURIOrConstant><t:Constant Value="Archive"/></t:FieldURIOrConstant>
+        </t:IsEqualTo>
+      </m:Restriction>
+      <m:ParentFolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:ParentFolderIds>
+    </m:FindFolder>
+  </soap:Body>
+</soap:Envelope>`,(ok,val)=>{
+        if(!ok){cb(null);return;}
+        try{
+          const doc=new DOMParser().parseFromString(val,'text/xml');
+          const fids=doc.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types','FolderId');
+          cb(fids&&fids.length>0?fids[0].getAttribute('Id'):null);
+        }catch(e){cb(null);}
+      });
+    }
+
+    function archiveEmail(rawId,cb){
+      if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
+      dbgClear();
+      buildDbgPanel();
+      setStatus("Archiving…");
+      dbg("archiveEmail start, rawId="+rawId.slice(0,40)+"...");
+      getItemDetails(rawId,(id,ck)=>{
+        if(!id){setStatus("Could not archive — item not found.",3000);dbg("archiveEmail: getItemDetails returned null");if(cb)cb();return;}
+        dbg("archiveEmail: got id+ck, trying DistinguishedFolderId=archive");
+        makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:MoveItem>
+      <m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>
+      <m:ItemIds><t:ItemId Id="${id}" ChangeKey="${ck}"/></m:ItemIds>
+    </m:MoveItem>
+  </soap:Body>
+</soap:Envelope>`,(ok,val,err)=>{
+          dbg("MoveItem (archive) result: ok="+ok+(err?" err="+JSON.stringify(err):"")+((!ok&&val)?" xml="+val.slice(0,300):""));
+          if(ok){
+            setStatus("Archived.",2000);
+            if(cb)cb();
+          } else {
+            dbg("archive DistinguishedFolderId failed, trying named folder search...");
+            findArchiveFolderId(fid=>{
+              if(!fid){setStatus("Archive failed — folder not found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
+              dbg("found named folder id="+fid.slice(0,40)+"..., moving now");
+              makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:MoveItem>
+      <m:ToFolderId><t:FolderId Id="${fid}"/></m:ToFolderId>
+      <m:ItemIds><t:ItemId Id="${id}" ChangeKey="${ck}"/></m:ItemIds>
+    </m:MoveItem>
+  </soap:Body>
+</soap:Envelope>`,(ok2,val2,err2)=>{
+                dbg("MoveItem (named) result: ok="+ok2+(err2?" err="+JSON.stringify(err2):"")+((!ok2&&val2)?" xml="+val2.slice(0,300):""));
+                setStatus(ok2?"Archived.":"Archive failed — see debug log.",ok2?2000:6000);
+                if(cb)cb();
+              });
+            });
+          }
+        });
+      });
+    }
+
+    function removeColourByEws(rawId,cb){
+      if(!rawId){if(cb)cb();return;}
+      getItemDetails(rawId,(id,ck)=>{
+        if(!id){if(cb)cb();return;}
+        makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:UpdateItem MessageDisposition="SaveOnly" ConflictResolution="AlwaysOverwrite">
+      <m:ItemChanges>
+        <t:ItemChange>
+          <t:ItemId Id="${id}" ChangeKey="${ck}"/>
+          <t:Updates>
+            <t:DeleteItemField><t:FieldURI FieldURI="item:Categories"/></t:DeleteItemField>
+          </t:Updates>
+        </t:ItemChange>
+      </m:ItemChanges>
+    </m:UpdateItem>
+  </soap:Body>
+</soap:Envelope>`,()=>{if(cb)cb();});
+      });
+    }
+
+    // ── Email tab ─────────────────────────────────────────────
+    let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null;
+
+    function removeOutlookColour(){
+      if(!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{});
+    }
+
+    function applyOutlookColour(task){
+      const days=task.days;let colour;
+      if(task.type==="task")colour=days<=2?"High":days<=7?"Med":"Low";
+      else if(task.type==="discuss")colour="Discuss";
+      else if(task.type==="waiting")colour="Waiting";
+      else if(task.type==="delegated")colour="Delegate";
+      if(!colour||!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.addAsync([colour],result=>{});
+    }
+
+    function addOrReplace(taskObj){
+      if(currentTaskId!==null)removeTask(currentTaskId);
+      taskObj.id=nid++;taskObj.emailId=currentEmailId;
+      try{ taskObj.conversationId=Office.context.mailbox.item.conversationId||null; }catch(e){ taskObj.conversationId=null; }
+      tasks.push(taskObj);currentTaskId=taskObj.id;
+      saveTasks();applyOutlookColour(taskObj);
+    }
+
+    function vRow(lbl,val,card){
+      const row=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});
+      row.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:lbl}));
+      const vs=el("span",{fontSize:"11px",color:"#222",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});
+      vs.innerHTML=val||"—";row.appendChild(vs);card.appendChild(row);
+    }
+
+    function renderNew(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      es.appendChild(mkLbl("TASK TYPE"));
+      const fieldsDiv=el("div",{});
+      const addBtn=el("button",{width:"100%",padding:"8px",borderRadius:"7px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"Arial,sans-serif",marginTop:"8px",display:"none"},{textContent:"+ Add to tasks"});
+      const tg=mkTypeGrid(form.type,t=>{form.type=t;buildFields(t,form,fieldsDiv);addBtn.style.display="block";});
+      tg.style.marginTop="4px";es.appendChild(tg);es.appendChild(fieldsDiv);
+      if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";}
+      addBtn.addEventListener("click",()=>{
+        saved={...form};
+        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
+        mode="view";renderEmail();
+      });
+      es.appendChild(addBtn);
+    }
+
+    function renderView(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      const t=saved.type,bg=TC[t]||"#0078D4";
+      const card=el("div",{background:"#fff",border:"1px solid #ddd",borderRadius:"10px",padding:"10px",marginBottom:"8px"});
+      const typeRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});
+      typeRow.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:"Type"}));
+      const vs=el("span",{fontSize:"11px",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});
+      vs.appendChild(el("span",{display:"inline-block",padding:"3px 8px",borderRadius:"6px",fontSize:"11px",fontWeight:"700",background:bg,color:"#fff",fontFamily:"Arial,sans-serif"},{textContent:TL[t]}));
+      typeRow.appendChild(vs);card.appendChild(typeRow);
+      if(t==="waiting"){vRow("Expected",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Waiting on",saved.waitingWho||"—",card);if(saved.notes)vRow("Details",saved.notes,card);}
+      else if(t==="delegated"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Delegated to",saved.delegateTo||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      else if(t==="discuss"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      else{vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.effort)vRow("Effort",saved.effort,card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      if(card.lastChild&&card.lastChild.style)card.lastChild.style.borderBottom="none";
+      es.appendChild(card);
+      const editBtn=mkBtn("Edit task","#fff","#333","1px solid #ccc");
+      editBtn.addEventListener("click",()=>{form={...saved};mode="edit";renderEmail();});es.appendChild(editBtn);
+      const cmpBtn=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");
+      cmpBtn.addEventListener("click",()=>{
+        const emailToArchive=currentEmailId;
+        const originalTask=tasks.find(t=>t.id===currentTaskId);
+        const taggedEmailId=originalTask&&originalTask.emailId?originalTask.emailId:currentEmailId;
+        addPending(taggedEmailId);
+        removeOutlookColour();
+        removeColourByEws(taggedEmailId);
+        if(currentTaskId!==null)removeTask(currentTaskId);
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        saved={};mode="new";renderEmail();renderDash();
+        archiveEmail(emailToArchive,()=>renderDash());
+      });es.appendChild(cmpBtn);
+      const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
+      canBtn.addEventListener("click",()=>{
+        removeOutlookColour();
+        if(currentTaskId!==null)removeTask(currentTaskId);
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};mode="new";renderEmail();renderDash();
+      });es.appendChild(canBtn);
+    }
+
+    function renderEdit(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      es.appendChild(mkLbl("TASK TYPE"));
+      const tg=mkTypeGrid(form.type,null);tg.style.marginTop="4px";tg.style.pointerEvents="none";tg.style.opacity="0.4";es.appendChild(tg);
+      es.appendChild(el("div",{fontSize:"10px",color:"#aaa",margin:"2px 0 8px",fontStyle:"italic",fontFamily:"Arial,sans-serif"},{textContent:"Type locked — cancel task to change"}));
+      const fieldsDiv=el("div",{});es.appendChild(fieldsDiv);buildFields(form.type,form,fieldsDiv);
+      const saveBtn=mkBtn("Save changes","#0078D4","#fff","none");
+      saveBtn.addEventListener("click",()=>{saved={...form};addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});mode="view";renderEmail();});
+      es.appendChild(saveBtn);
+      const discardBtn=mkBtn("Discard changes","#fff","#333","1px solid #ccc");
+      discardBtn.addEventListener("click",()=>{form={...saved};mode="view";renderEmail();});es.appendChild(discardBtn);
+    }
+
+    function renderEmail(){
+      if(mode==="new")renderNew();
+      else if(mode==="view")renderView();
+      else renderEdit();
+    }
+    renderEmail();
+
+    // ── Dashboard manual task ─────────────────────────────────
+    let dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    function renderManualForm(){
+      const mf=document.getElementById("mForm");mf.innerHTML="";
+      const box=el("div",{background:"#fff",border:"1px solid #ddd",borderRadius:"10px",padding:"12px",marginBottom:"10px"});
+      box.appendChild(el("div",{fontSize:"12px",fontWeight:"700",color:"#222",marginBottom:"10px",paddingBottom:"7px",borderBottom:"1px solid #eee",fontFamily:"Arial,sans-serif"},{textContent:"New manual task"}));
+      box.appendChild(mkLbl("TITLE"));
+      const titleInp=mkInput("text","mTitle","What needs to be done?");box.appendChild(titleInp);
+      box.appendChild(mkLbl("TASK TYPE"));
+      const dynDiv=el("div",{});
+      const tg=mkTypeGrid(dType,t=>{dType=t;dForm.type=t;buildFields(t,dForm,dynDiv);});
+      tg.style.marginTop="4px";box.appendChild(tg);box.appendChild(dynDiv);
+      const btnRow=el("div",{display:"flex",gap:"5px",marginTop:"8px"});
+      const addB=el("button",{flex:"1",padding:"8px",borderRadius:"7px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"Arial,sans-serif"},{textContent:"+ Add task"});
+      addB.addEventListener("click",()=>{
+        const title=titleInp.value.trim()||"Manual task";
+        tasks.push({id:nid++,title,days:daysFromDate(dForm.dueDate),dueDate:dForm.dueDate||"",type:dType||"task",effort:dForm.effort||"",importance:dForm.importance||null,who:dForm.waitingWho||dForm.delegateTo||""});
+        saveTasks();
+        document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";
+        titleInp.value="";dType="";dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};renderDash();
+      });
+      const canB=el("button",{padding:"0 12px",height:"36px",borderRadius:"7px",border:"1px solid #ccc",background:"#fff",color:"#555",fontSize:"12px",cursor:"pointer",fontFamily:"Arial,sans-serif"},{textContent:"Cancel"});
+      canB.addEventListener("click",()=>{document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";});
+      btnRow.appendChild(addB);btnRow.appendChild(canB);box.appendChild(btnRow);mf.appendChild(box);
+    }
+
+    document.getElementById("newTaskBtn").addEventListener("click",()=>{
+      document.getElementById("mForm").style.display="block";document.getElementById("newTaskBtn").style.display="none";renderManualForm();
+    });
+
+    // ── Tab switching ─────────────────────────────────────────
+    function switchTab(active){
+      ["Email","Dash","Matrix"].forEach(n=>{
+        document.getElementById("p"+n).classList.toggle("active",n===active);
+        document.getElementById("tab"+n).classList.toggle("on",n===active);
+      });
+    }
+    document.getElementById("tabEmail").addEventListener("click",()=>switchTab("Email"));
+    document.getElementById("tabDash").addEventListener("click",()=>{switchTab("Dash");loadFlaggedEmails(renderDash);});
+    document.getElementById("tabMatrix").addEventListener("click",()=>{switchTab("Matrix");renderMatrix();});
+
+    // ── Office init ───────────────────────────────────────────
+    Office.onReady((info)=>{
+      if(info.host===Office.HostType.Outlook){
+        Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,onItemChanged);
+        onItemChanged();
+        loadFlaggedEmails(renderDash);
+      }
+    });
+
+    function onItemChanged(){
+      const item=Office.context.mailbox.item;
+      if(!item){
+        currentEmailSubject="Select an email to begin";currentEmailId=null;
+        document.getElementById("eSnip").textContent=currentEmailSubject;
+        mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};currentTaskId=null;
+        renderEmail();return;
+      }
+      currentEmailSubject=item.subject||"No subject";
+      currentEmailId=item.itemId;
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      if(isPending(currentEmailId)){
+        Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{removePending(currentEmailId);});
+      }
+      const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
+        tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId);
+      if(existingTask){
+        currentTaskId=existingTask.id;
+        saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",notes:existingTask.notes||""};
+        mode="view";
+        // If matched via conversation (not exact email), apply colour to current email too
+        if(existingTask.emailId!==currentEmailId){ applyOutlookColour(existingTask); }
+      } else {
+        currentTaskId=null;mode="new";
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};
+      }
+      renderEmail();
+    }
+  </script>
+</body>
+</html>
