@@ -621,8 +621,11 @@
 
     // ── EWS helpers ───────────────────────────────────────────
     function makeEwsCall(xml,cb){
-      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){if(cb)cb(false);return;}
-      Office.context.mailbox.makeEwsRequestAsync(xml,r=>{if(cb)cb(r.status===Office.AsyncResultStatus.Succeeded,r.value,r.error);});
+      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){dbg("EWS not available");if(cb)cb(false);return;}
+      Office.context.mailbox.makeEwsRequestAsync(xml,r=>{
+        dbg("EWS raw: status="+r.status+" valueType="+typeof r.value+" valueLen="+(r.value?r.value.length:"null")+" val="+String(r.value||"").slice(0,500));
+        if(cb)cb(r.status===Office.AsyncResultStatus.Succeeded,r.value,r.error);
+      });
     }
 
     function getItemDetails(rawId,cb){
@@ -691,41 +694,54 @@
       if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
       dbgClear();
       setStatus("Archiving…");
-      dbg("archiveEmail start");
-      try{
-        var restId=rawId;
-        try{restId=Office.context.mailbox.convertToRestId(rawId,Office.MailboxEnums.RestVersion.v2_0);}catch(e){dbg("convertToRestId not available, using raw id");}
-        Office.context.mailbox.getCallbackTokenAsync({isRest:true},function(result){
-          if(result.status!==Office.AsyncResultStatus.Succeeded){
-            dbg("getCallbackToken failed: "+(result.error?result.error.message:"unknown"));
-            setStatus("Archive failed — could not get token.",4000);
-            if(cb)cb();return;
-          }
-          var token=result.value;
-          var restUrl=Office.context.mailbox.restUrl+"/v2.0/me/messages/"+encodeURIComponent(restId)+"/move";
-          dbg("REST move: "+restUrl.slice(0,100)+"...");
-          var xhr=new XMLHttpRequest();
-          xhr.open("POST",restUrl);
-          xhr.setRequestHeader("Authorization","Bearer "+token);
-          xhr.setRequestHeader("Content-Type","application/json");
-          xhr.onreadystatechange=function(){
-            if(xhr.readyState===4){
-              dbg("REST response: "+xhr.status+" "+xhr.responseText.slice(0,200));
-              if(xhr.status>=200&&xhr.status<300){
-                setStatus("Archived.",2000);
-              } else {
-                setStatus("Archive failed ("+xhr.status+") — see debug log.",6000);
-              }
+      var ewsId=toEwsId(rawId);
+      dbg("archiveEmail: trying MoveItem to archive folder");
+      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:MoveItem>
+      <m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>
+      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
+    </m:MoveItem>
+  </soap:Body>
+</soap:Envelope>`,(ok,val,err)=>{
+        dbg("MoveItem result: ok="+ok);
+        if(ok&&val&&val.indexOf("ResponseClass=\"Success\"")>-1){
+          setStatus("Archived.",2000);
+          if(cb)cb();
+        } else if(ok&&val&&val.indexOf("ResponseClass=\"Error\"")>-1){
+          dbg("EWS error in response");
+          dbg("Trying named Archive folder search...");
+          findArchiveFolderId(fid=>{
+            if(!fid){setStatus("Archive failed — no Archive folder found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
+            dbg("Found folder, moving...");
+            makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:MoveItem>
+      <m:ToFolderId><t:FolderId Id="${fid}"/></m:ToFolderId>
+      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
+    </m:MoveItem>
+  </soap:Body>
+</soap:Envelope>`,(ok2,val2,err2)=>{
+              var success2=ok2&&val2&&val2.indexOf("ResponseClass=\"Success\"")>-1;
+              setStatus(success2?"Archived.":"Archive failed — see debug log.",success2?2000:6000);
               if(cb)cb();
-            }
-          };
-          xhr.send(JSON.stringify({DestinationId:"archive"}));
-        });
-      }catch(e){
-        dbg("archiveEmail error: "+e);
-        setStatus("Archive failed — see debug log.",4000);
-        if(cb)cb();
-      }
+            });
+          });
+        } else {
+          setStatus("Archive failed — see debug log.",4000);
+          if(cb)cb();
+        }
+      });
     }
 
     function removeColourByEws(rawId,cb){
