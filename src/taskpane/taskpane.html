@@ -686,57 +686,47 @@
       });
     }
 
+    function tryMoveItem(ewsId,toFolderXml,cb){
+      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
+<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
+               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
+               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
+  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
+  <soap:Body>
+    <m:MoveItem>
+      <m:ToFolderId>${toFolderXml}</m:ToFolderId>
+      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
+    </m:MoveItem>
+  </soap:Body>
+</soap:Envelope>`,cb);
+    }
+
     function archiveEmail(rawId,cb){
       buildDbgPanel();
       if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
       dbgClear();
       setStatus("Archiving…");
-      dbg("archiveEmail start, rawId="+rawId.slice(0,40)+"...");
-      getItemDetails(rawId,(id,ck)=>{
-        if(!id){setStatus("Could not archive — item not found.",3000);dbg("archiveEmail: getItemDetails returned null");if(cb)cb();return;}
-        dbg("archiveEmail: got id+ck, trying DistinguishedFolderId=archive");
-        makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:MoveItem>
-      <m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>
-      <m:ItemIds><t:ItemId Id="${id}" ChangeKey="${ck}"/></m:ItemIds>
-    </m:MoveItem>
-  </soap:Body>
-</soap:Envelope>`,(ok,val,err)=>{
-          dbg("MoveItem (archive) result: ok="+ok+(err?" err="+JSON.stringify(err):"")+((!ok&&val)?" xml="+val.slice(0,300):""));
-          if(ok){
-            setStatus("Archived.",2000);
-            if(cb)cb();
-          } else {
-            dbg("archive DistinguishedFolderId failed, trying named folder search...");
-            findArchiveFolderId(fid=>{
-              if(!fid){setStatus("Archive failed — folder not found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
-              dbg("found named folder id="+fid.slice(0,40)+"..., moving now");
-              makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:MoveItem>
-      <m:ToFolderId><t:FolderId Id="${fid}"/></m:ToFolderId>
-      <m:ItemIds><t:ItemId Id="${id}" ChangeKey="${ck}"/></m:ItemIds>
-    </m:MoveItem>
-  </soap:Body>
-</soap:Envelope>`,(ok2,val2,err2)=>{
-                dbg("MoveItem (named) result: ok="+ok2+(err2?" err="+JSON.stringify(err2):"")+((!ok2&&val2)?" xml="+val2.slice(0,300):""));
-                setStatus(ok2?"Archived.":"Archive failed — see debug log.",ok2?2000:6000);
-                if(cb)cb();
-              });
+      const ewsId=toEwsId(rawId);
+      dbg("archiveEmail start, id="+ewsId.slice(0,40)+"...");
+      dbg("trying DistinguishedFolderId=archive...");
+      tryMoveItem(ewsId,'<t:DistinguishedFolderId Id="archive"/>',(ok,val,err)=>{
+        dbg("MoveItem (archive) result: ok="+ok+(val?" xml="+val.slice(0,300):"")+(err?" err="+JSON.stringify(err):""));
+        if(ok){
+          setStatus("Archived.",2000);
+          if(cb)cb();
+        } else {
+          dbg("DistinguishedFolderId failed, searching for Archive folder...");
+          findArchiveFolderId(fid=>{
+            if(!fid){setStatus("Archive failed — folder not found.",4000);dbg("findArchiveFolderId returned null");if(cb)cb();return;}
+            dbg("found folder id="+fid.slice(0,40)+"..., moving...");
+            tryMoveItem(ewsId,'<t:FolderId Id="'+fid+'"/>',(ok2,val2,err2)=>{
+              dbg("MoveItem (named) result: ok="+ok2+(val2?" xml="+val2.slice(0,300):"")+(err2?" err="+JSON.stringify(err2):""));
+              setStatus(ok2?"Archived.":"Archive failed — see debug log.",ok2?2000:6000);
+              if(cb)cb();
             });
-          }
-        });
+          });
+        }
       });
     }
 
