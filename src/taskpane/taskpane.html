@@ -354,11 +354,9 @@
       card.appendChild(meta);
       const cb=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"Arial,sans-serif"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
-        const emailToArchive=t.emailId;
         if(!t.recurring){removeTask(t.id);}
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
-        if(emailToArchive){addPending(emailToArchive);archiveEmail(emailToArchive,()=>renderDash());}
       });
       const br=el("div",{display:"flex",justifyContent:"flex-end"});br.appendChild(cb);card.appendChild(br);
       return card;
@@ -619,151 +617,8 @@
       mc.appendChild(legWrap);
     }
 
-    // ── EWS helpers ───────────────────────────────────────────
-    function makeEwsCall(xml,cb){
-      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){dbg("EWS not available");if(cb)cb(false);return;}
-      Office.context.mailbox.makeEwsRequestAsync(xml,r=>{
-        dbg("EWS raw: status="+r.status+" valueType="+typeof r.value+" valueLen="+(r.value?r.value.length:"null")+" val="+String(r.value||"").slice(0,500));
-        if(cb)cb(r.status===Office.AsyncResultStatus.Succeeded,r.value,r.error);
-      });
-    }
-
-    function getItemDetails(rawId,cb){
-      const ewsId=toEwsId(rawId);
-      dbg("getItemDetails: rawId="+rawId.slice(0,40)+"...");
-      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:GetItem>
-      <m:ItemShape><t:BaseShape>IdOnly</t:BaseShape></m:ItemShape>
-      <m:ItemIds><t:ItemId Id="${ewsId}"/></m:ItemIds>
-    </m:GetItem>
-  </soap:Body>
-</soap:Envelope>`,(ok,val,err)=>{
-        dbg("getItemDetails result: ok="+ok+(err?" err="+JSON.stringify(err):""));
-        if(!ok){cb(null,null);return;}
-        try{
-          const doc=new DOMParser().parseFromString(val,'text/xml');
-          const ids=doc.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types','ItemId');
-          if(ids&&ids.length>0){
-            dbg("getItemDetails: got id+changekey ok");
-            cb(ids[0].getAttribute('Id'),ids[0].getAttribute('ChangeKey'));
-          } else {
-            dbg("getItemDetails: no ItemId in response. XML="+val.slice(0,200));
-            cb(null,null);
-          }
-        }catch(e){dbg("getItemDetails parse error: "+e);cb(null,null);}
-      });
-    }
-
-    function findArchiveFolderId(cb){
-      makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:FindFolder Traversal="Deep">
-      <m:FolderShape><t:BaseShape>IdOnly</t:BaseShape><t:AdditionalProperties><t:FieldURI FieldURI="folder:DisplayName"/></t:AdditionalProperties></m:FolderShape>
-      <m:Restriction>
-        <t:IsEqualTo>
-          <t:FieldURI FieldURI="folder:DisplayName"/>
-          <t:FieldURIOrConstant><t:Constant Value="Archive"/></t:FieldURIOrConstant>
-        </t:IsEqualTo>
-      </m:Restriction>
-      <m:ParentFolderIds><t:DistinguishedFolderId Id="msgfolderroot"/></m:ParentFolderIds>
-    </m:FindFolder>
-  </soap:Body>
-</soap:Envelope>`,(ok,val)=>{
-        if(!ok){cb(null);return;}
-        try{
-          const doc=new DOMParser().parseFromString(val,'text/xml');
-          const fids=doc.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types','FolderId');
-          cb(fids&&fids.length>0?fids[0].getAttribute('Id'):null);
-        }catch(e){cb(null);}
-      });
-    }
-
-    function archiveEmail(rawId,cb){
-      buildDbgPanel();
-      if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
-      dbgClear();
-      setStatus("Archiving…");
-      var ewsId=toEwsId(rawId);
-      dbg("Getting EWS callback token...");
-      Office.context.mailbox.getCallbackTokenAsync(function(tokenResult){
-        if(tokenResult.status!==Office.AsyncResultStatus.Succeeded){
-          dbg("EWS token failed: "+(tokenResult.error?tokenResult.error.message:"unknown"));
-          setStatus("Cannot archive — token unavailable.",4000);
-          if(cb)cb();return;
-        }
-        var token=tokenResult.value;
-        var ewsUrl=Office.context.mailbox.ewsUrl;
-        dbg("Got token. ewsUrl="+ewsUrl);
-        var soapXml='<?xml version="1.0" encoding="utf-8"?>'+
-          '<soap:Envelope xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/" '+
-          'xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types" '+
-          'xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages">'+
-          '<soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>'+
-          '<soap:Body><m:MoveItem>'+
-          '<m:ToFolderId><t:DistinguishedFolderId Id="archive"/></m:ToFolderId>'+
-          '<m:ItemIds><t:ItemId Id="'+ewsId+'"/></m:ItemIds>'+
-          '</m:MoveItem></soap:Body></soap:Envelope>';
-        dbg("Sending MoveItem via XHR...");
-        var xhr=new XMLHttpRequest();
-        xhr.open("POST",ewsUrl);
-        xhr.setRequestHeader("Authorization","Bearer "+token);
-        xhr.setRequestHeader("Content-Type","text/xml; charset=utf-8");
-        xhr.onreadystatechange=function(){
-          if(xhr.readyState===4){
-            dbg("Response: status="+xhr.status+" body="+xhr.responseText.slice(0,400));
-            if(xhr.status>=200&&xhr.status<300&&xhr.responseText.indexOf('ResponseClass="Success"')>-1){
-              setStatus("Archived.",2000);
-            } else {
-              setStatus("Archive failed ("+xhr.status+") — see debug log.",6000);
-            }
-            if(cb)cb();
-          }
-        };
-        xhr.onerror=function(){
-          dbg("XHR network error (likely CORS blocked)");
-          setStatus("Archive not available — use Backspace to archive manually.",6000);
-          if(cb)cb();
-        };
-        xhr.send(soapXml);
-      });
-    }
-
-    function removeColourByEws(rawId,cb){
-      if(!rawId){if(cb)cb();return;}
-      getItemDetails(rawId,(id,ck)=>{
-        if(!id){if(cb)cb();return;}
-        makeEwsCall(`<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:UpdateItem MessageDisposition="SaveOnly" ConflictResolution="AlwaysOverwrite">
-      <m:ItemChanges>
-        <t:ItemChange>
-          <t:ItemId Id="${id}" ChangeKey="${ck}"/>
-          <t:Updates>
-            <t:DeleteItemField><t:FieldURI FieldURI="item:Categories"/></t:DeleteItemField>
-          </t:Updates>
-        </t:ItemChange>
-      </m:ItemChanges>
-    </m:UpdateItem>
-  </soap:Body>
-</soap:Envelope>`,()=>{if(cb)cb();});
-      });
-    }
+    // EWS is non-functional in this Exchange environment (empty responses,
+    // token requests blocked). All item operations use Office.js API instead.
 
     // ── Email tab ─────────────────────────────────────────────
     let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
@@ -834,18 +689,13 @@
       es.appendChild(card);
       const editBtn=mkBtn("Edit task","#fff","#333","1px solid #ccc");
       editBtn.addEventListener("click",()=>{form={...saved};mode="edit";renderEmail();});es.appendChild(editBtn);
-      const cmpBtn=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");
+      const cmpBtn=mkBtn("Mark complete","#E1F5EE","#085041","1px solid #9FE1CB");
       cmpBtn.addEventListener("click",()=>{
-        const emailToArchive=currentEmailId;
-        const originalTask=tasks.find(t=>t.id===currentTaskId);
-        const taggedEmailId=originalTask&&originalTask.emailId?originalTask.emailId:currentEmailId;
-        addPending(taggedEmailId);
         removeOutlookColour();
-        if(taggedEmailId && taggedEmailId !== emailToArchive) removeColourByEws(taggedEmailId);
         if(currentTaskId!==null)removeTask(currentTaskId);
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
         saved={};mode="new";renderEmail();renderDash();
-        archiveEmail(emailToArchive,()=>renderDash());
+        setStatus("Done — press Backspace to archive this email.",4000);
       });es.appendChild(cmpBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
       canBtn.addEventListener("click",()=>{
