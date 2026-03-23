@@ -353,7 +353,7 @@
         if(!t.recurring){removeTask(t.id);}
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
-        if(emailToArchive){addPending(emailToArchive);removeColourByEws(emailToArchive);archiveEmail(emailToArchive,()=>renderDash());}
+        if(emailToArchive){addPending(emailToArchive);archiveEmail(emailToArchive,()=>renderDash());}
       });
       const br=el("div",{display:"flex",justifyContent:"flex-end"});br.appendChild(cb);card.appendChild(br);
       return card;
@@ -837,7 +837,7 @@
         const taggedEmailId=originalTask&&originalTask.emailId?originalTask.emailId:currentEmailId;
         addPending(taggedEmailId);
         removeOutlookColour();
-        removeColourByEws(taggedEmailId);
+        if(taggedEmailId && taggedEmailId !== emailToArchive) removeColourByEws(taggedEmailId);
         if(currentTaskId!==null)removeTask(currentTaskId);
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
         saved={};mode="new";renderEmail();renderDash();
