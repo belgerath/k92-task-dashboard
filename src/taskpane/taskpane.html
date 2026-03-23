@@ -310,11 +310,37 @@
     }
 
     function loadFlaggedEmails(cb){
-      if(!Office||!Office.context||!Office.context.mailbox||!Office.context.mailbox.makeEwsRequestAsync){if(cb)cb();return;}
+      if(!window.k92Graph){if(cb)cb();return;}
       flagsLoading=true;renderDash();
-      Office.context.mailbox.makeEwsRequestAsync(buildFlaggedEwsRequest(),result=>{
+      window.k92Graph.scanCategorizedEmails().then(msgs=>{
         flagsLoading=false;
-        flaggedEmails=result.status===Office.AsyncResultStatus.Succeeded?parseFlaggedEmails(result.value):[];
+        // Deduplicate by conversationId — keep only the latest per conversation
+        const seen=new Set();
+        const deduped=[];
+        msgs.forEach(m=>{
+          const key=m.conversationId||m.id;
+          if(!seen.has(key)){seen.add(key);deduped.push(m);}
+        });
+        // Auto-create tasks for categorized emails not already tracked
+        const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
+        deduped.forEach(m=>{
+          const existing=tasks.find(t=>t.conversationId && m.conversationId && t.conversationId===m.conversationId);
+          if(existing)return;
+          const found=(m.categories||[]).find(c=>catMap[c]);
+          if(!found)return;
+          const type=catMap[found];
+          const defaultDays=found==="High"?2:found==="Med"?7:14;
+          const due=new Date(localToday().getTime()+defaultDays*864e5);
+          const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
+          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null});
+        });
+        saveTasks();
+        flaggedEmails=[];
+        if(cb)cb();else renderDash();
+      }).catch(e=>{
+        flagsLoading=false;
+        console.error("Graph scan failed:",e);
+        flaggedEmails=[];
         if(cb)cb();else renderDash();
       });
     }
@@ -354,14 +380,20 @@
       card.appendChild(meta);
       const cb=el("button",{fontSize:"10px",padding:"2px 8px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"Arial,sans-serif"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
-        // If this task's email is currently selected, swap categories
-        if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+        // Use Graph API to swap categories on any email (even if not selected)
+        if(t.emailId && window.k92Graph){
+          window.k92Graph.setCategories(t.emailId,["To be Archived"]).catch(e=>{
+            console.error("Graph setCategories failed:",e);
+            // Fallback: if currently selected, use Office.js
+            if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+              (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+              removeOutlookColour();
+            } else { addPending(t.emailId); }
+          });
+        } else if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
           (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
           removeOutlookColour();
-        } else if(t.emailId){
-          // Email not selected — queue for category removal next time it's opened
-          addPending(t.emailId);
-        }
+        } else if(t.emailId){ addPending(t.emailId); }
         if(!t.recurring){removeTask(t.id);}
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
@@ -699,14 +731,30 @@
       es.appendChild(card);
       const editBtn=mkBtn("Edit task","#fff","#333","1px solid #ccc");
       editBtn.addEventListener("click",()=>{form={...saved};mode="edit";renderEmail();});es.appendChild(editBtn);
-      const cmpBtn=mkBtn("Mark complete","#E1F5EE","#085041","1px solid #9FE1CB");
+      const cmpBtn=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");
       cmpBtn.addEventListener("click",()=>{
+        removeOutlookColour();
+        if(currentEmailId && window.k92Graph){
+          setStatus("Archiving...");
+          window.k92Graph.archiveMessage(currentEmailId).then(()=>{
+            setStatus("Archived.",3000);
+          }).catch(e=>{
+            console.error("Archive failed:",e);
+            setStatus("Completed — archive failed, tagged for manual archive.",4000);
+          });
+        }
+        if(currentTaskId!==null)removeTask(currentTaskId);
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        saved={};mode="new";renderEmail();renderDash();
+      });es.appendChild(cmpBtn);
+      const cmpNoArchBtn=mkBtn("Mark complete (no archive)","#fff","#085041","1px solid #9FE1CB");
+      cmpNoArchBtn.addEventListener("click",()=>{
         removeOutlookColour();
         if(currentTaskId!==null)removeTask(currentTaskId);
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
         saved={};mode="new";renderEmail();renderDash();
-        setStatus("Done — press Backspace to archive this email.",4000);
-      });es.appendChild(cmpBtn);
+        setStatus("Task completed.",3000);
+      });es.appendChild(cmpNoArchBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
       canBtn.addEventListener("click",()=>{
         removeOutlookColour();
@@ -780,6 +828,8 @@
     // ── Office init ───────────────────────────────────────────
     Office.onReady((info)=>{
       if(info.host===Office.HostType.Outlook){
+        // Initialize Graph API (MSAL) — non-blocking
+        if(window.k92Graph){window.k92Graph.init().catch(e=>console.warn("MSAL init deferred:",e));}
         Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,onItemChanged);
         onItemChanged();
         loadFlaggedEmails(renderDash);
