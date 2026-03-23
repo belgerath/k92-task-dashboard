@@ -59,12 +59,17 @@
       const el = document.getElementById("dbgLog");
       if(!el) return;
       el.style.display = "block";
-      el.querySelector(".dbg-text").textContent += new Date().toLocaleTimeString() + " " + msg + "\n";
-      el.querySelector(".dbg-text").scrollTop = el.querySelector(".dbg-text").scrollHeight;
+      const txt = el.querySelector(".dbg-text");
+      if(!txt) return;
+      txt.textContent += new Date().toLocaleTimeString() + " " + msg + "\n";
+      txt.scrollTop = txt.scrollHeight;
     }
     function dbgClear() {
       const el = document.getElementById("dbgLog");
-      if(el){ el.querySelector(".dbg-text").textContent=""; el.style.display="none"; }
+      if(!el) return;
+      const txt = el.querySelector(".dbg-text");
+      if(txt) txt.textContent = "";
+      el.style.display = "none";
     }
     function buildDbgPanel() {
       const wrap = document.getElementById("dbgLog");
@@ -682,9 +687,9 @@
     }
 
     function archiveEmail(rawId,cb){
+      buildDbgPanel();
       if(!rawId){dbg("archiveEmail: no rawId");if(cb)cb();return;}
       dbgClear();
-      buildDbgPanel();
       setStatus("Archiving…");
       dbg("archiveEmail start, rawId="+rawId.slice(0,40)+"...");
       getItemDetails(rawId,(id,ck)=>{
