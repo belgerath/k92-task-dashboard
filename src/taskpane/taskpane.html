@@ -271,6 +271,9 @@
     function removeTask(id){const i=tasks.findIndex(t=>t.id===id);if(i>-1){tasks.splice(i,1);saveTasks();}}
 
     // ── Recurring tasks ───────────────────────────────────────
+    function loadCustomRecurring(){try{return JSON.parse(localStorage.getItem('k92recurring')||'[]');}catch(e){return[];}}
+    function saveCustomRecurring(list){try{localStorage.setItem('k92recurring',JSON.stringify(list));}catch(e){}}
+
     function getRecurringTasks(){
       const today=localToday(),y=today.getFullYear(),m=today.getMonth(),recurring=[];
       function addIfDue(title,dueDate,effort){
@@ -286,6 +289,28 @@
       addIfDue("Monthly Cash Flow Model",new Date(y,m,9),"Deep");
       [[2,31],[5,30],[8,30]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Calculation",new Date(y,mo,day),"Medium"));
       [[3,30],[6,31],[9,31]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Payment",new Date(y,mo,day),"Quick"));
+      // Custom recurring tasks from editor
+      const custom=loadCustomRecurring();
+      custom.forEach(cr=>{
+        if(cr.freq==="monthly"){
+          (cr.days||[]).forEach(day=>{
+            const d=Math.min(day,lastDay.getDate());
+            addIfDue(cr.title,new Date(y,m,d),cr.effort||"Medium");
+          });
+        } else if(cr.freq==="quarterly"){
+          const qMonths=[0,3,6,9];
+          qMonths.forEach(qm=>{
+            const qLast=new Date(y,qm+1,0);
+            const d=Math.min(cr.dayOfMonth||1,qLast.getDate());
+            addIfDue(cr.title,new Date(y,qm,d),cr.effort||"Medium");
+          });
+        } else if(cr.freq==="weekly"){
+          for(let i=0;i<7;i++){
+            const dt=new Date(today.getTime()+i*864e5);
+            if(dt.getDay()===(cr.dayOfWeek||1))addIfDue(cr.title,dt,cr.effort||"Medium");
+          }
+        }
+      });
       return recurring;
     }
 
@@ -350,18 +375,56 @@
     // ── Task cards ────────────────────────────────────────────
     function tCard(t){
       const c=priColor(t.days),dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"Due today":t.days+"d left";
-      const card=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid "+c,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"});
-      card.addEventListener("mouseenter",()=>{card.style.background="#fafbfc";card.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";});
-      card.addEventListener("mouseleave",()=>{card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";});
+      const card=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid "+c,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"relative"});
+      // Notes tooltip on hover
+      let noteTip=null;
+      card.addEventListener("mouseenter",()=>{
+        card.style.background="#fafbfc";card.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";
+        if(t.notes){
+          noteTip=el("div",{position:"absolute",left:"0",right:"0",bottom:"100%",marginBottom:"4px",background:"#333",color:"#fff",padding:"6px 9px",borderRadius:"6px",fontSize:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif",zIndex:"100",boxShadow:"0 4px 12px rgba(0,0,0,0.2)",pointerEvents:"none",maxHeight:"80px",overflow:"hidden",wordBreak:"break-word"},{textContent:t.notes});
+          card.appendChild(noteTip);
+        }
+      });
+      card.addEventListener("mouseleave",()=>{
+        card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";
+        if(noteTip){noteTip.remove();noteTip=null;}
+      });
       card.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",marginBottom:"5px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:t.title}));
       const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});
       meta.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:c,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:dl}));
       if(t.importance)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+t.importance}));
       if(t.effort)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:t.effort}));
       if(t.recurring)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EFF6FF",color:"#1e40af",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"recurring"}));
+      if(t.notes)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#FFFBEB",color:"#92400E",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"📝"}));
       if(t.type==="delegated"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"→ "+t.who}));
       if(t.type==="waiting"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EEEDFE",color:"#3C3489",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"waiting: "+t.who}));
       card.appendChild(meta);
+      // Action buttons row
+      const br=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center"});
+      // Snooze buttons (only for non-recurring tasks)
+      if(!t.recurring){
+        const snoozeWrap=el("div",{display:"flex",gap:"3px",alignItems:"center"});
+        snoozeWrap.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Snooze:"}));
+        [1,3,7].forEach(d=>{
+          const sb=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"+"+d+"d"});
+          sb.addEventListener("mouseenter",()=>{sb.style.background="#e5e7eb";});
+          sb.addEventListener("mouseleave",()=>{sb.style.background="#f9fafb";});
+          sb.addEventListener("click",(ev)=>{
+            ev.stopPropagation();
+            const task=tasks.find(x=>x.id===t.id);
+            if(task){
+              const dp=task.dueDate?task.dueDate.split("-").map(Number):null;
+              const cur=dp?new Date(dp[0],dp[1]-1,dp[2]):localToday();
+              const nd=new Date(cur.getTime()+d*864e5);
+              task.dueDate=dateStr(nd);
+              task.days=daysFromDate(task.dueDate);
+              saveTasks();renderDash();
+            }
+          });
+          snoozeWrap.appendChild(sb);
+        });
+        br.appendChild(snoozeWrap);
+      } else { br.appendChild(el("div",{})); }
       const cb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
         // Use Graph API to swap categories and archive
@@ -370,7 +433,6 @@
             return window.k92Graph.archiveMessage(t.emailId);
           }).catch(e=>{
             console.error("Graph complete failed:",e);
-            // Fallback: if currently selected, use Office.js for categories only
             if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
               (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
               removeOutlookColour();
@@ -384,7 +446,7 @@
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
       });
-      const br=el("div",{display:"flex",justifyContent:"flex-end"});br.appendChild(cb);card.appendChild(br);
+      br.appendChild(cb);card.appendChild(br);
       return card;
     }
 
@@ -415,6 +477,15 @@
 
     function refreshDays(list){ list.forEach(t=>{ if(t.dueDate) t.days=daysFromDate(t.dueDate); }); }
 
+    function sortByDue(list){return list.sort((a,b)=>(a.days||0)-(b.days||0));}
+
+    function updateTabCounts(){
+      refreshDays(tasks);
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.dueDate===r.dueDate));
+      const total=tasks.length+rec.length;
+      document.getElementById("tabDash").textContent="Dashboard"+(total?" ("+total+")":"");
+    }
+
     function renderDash(){
       const dc=document.getElementById("dContent");dc.innerHTML="";
       refreshDays(tasks);
@@ -422,18 +493,123 @@
       const allTasks=[...tasks,...rec];
       const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting");
       addST(dc,"MY ACTION ITEMS");
-      dc.appendChild(secH("high","#DC2626","High priority",mine.filter(t=>priLabel(t.days)==="High")));
-      dc.appendChild(secH("medium","#D97706","Medium priority",mine.filter(t=>priLabel(t.days)==="Medium")));
-      dc.appendChild(secH("low","#16A34A","Low priority",mine.filter(t=>priLabel(t.days)==="Low")));
-      addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",disc));
-      addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",del));dc.appendChild(secH("waiting","#7C3AED","Waiting",wait));
+      dc.appendChild(secH("high","#DC2626","High priority",sortByDue(mine.filter(t=>priLabel(t.days)==="High"))));
+      dc.appendChild(secH("medium","#D97706","Medium priority",sortByDue(mine.filter(t=>priLabel(t.days)==="Medium"))));
+      dc.appendChild(secH("low","#16A34A","Low priority",sortByDue(mine.filter(t=>priLabel(t.days)==="Low"))));
+      addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",sortByDue(disc)));
+      addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",sortByDue(del)));dc.appendChild(secH("waiting","#7C3AED","Waiting",sortByDue(wait)));
+      // Recurring task editor button
+      const recBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"⚙ Recurring tasks"});
+      recBtn.addEventListener("click",()=>renderRecurringEditor(dc));
       // Sync button to scan inbox for categorized emails
       const syncBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"↻ Sync inbox"});
       syncBtn.addEventListener("click",()=>{lastScanTime=0;loadFlaggedEmails(renderDash);});
-      addST(dc,"",syncBtn);
+      const toolRow=el("div",{display:"flex",gap:"6px",marginTop:"14px",padding:"0 2px"});
+      toolRow.appendChild(syncBtn);toolRow.appendChild(recBtn);dc.appendChild(toolRow);
       if(flagsLoading){dc.appendChild(el("div",{fontSize:"11px",color:"#667085",fontFamily:"'Segoe UI',Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for categorized emails…"}));}
+      updateTabCounts();
     }
     renderDash();
+
+    // ── Recurring task editor ────────────────────────────────
+    function renderRecurringEditor(dc){
+      dc.innerHTML="";
+      const box=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
+      const hdr=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"8px",borderBottom:"1px solid #eee"});
+      hdr.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Recurring Tasks"}));
+      const backBtn=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"← Back"});
+      backBtn.addEventListener("click",()=>renderDash());
+      hdr.appendChild(backBtn);
+      box.appendChild(hdr);
+
+      // Built-in recurring tasks (read-only list)
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Built-in"}));
+      const builtIn=["Canada Payroll — 15th & last day","Australia Payroll — 15th & last day","Monthly Cost Report — 8th","Monthly Cash Flow Model — 9th","Quarterly Instalment Calc — end of Q","Quarterly Instalment Payment — start of Q+1"];
+      builtIn.forEach(name=>{
+        const row=el("div",{fontSize:"11px",padding:"5px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:name});
+        box.appendChild(row);
+      });
+
+      // Custom recurring tasks
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Custom recurring"}));
+      const custom=loadCustomRecurring();
+      if(!custom.length){
+        box.appendChild(el("div",{fontSize:"11px",color:"#98a2b3",padding:"6px 0",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"No custom recurring tasks yet."}));
+      }
+      custom.forEach((cr,idx)=>{
+        const row=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px"});
+        let desc=cr.title+" — "+cr.freq;
+        if(cr.freq==="monthly"&&cr.days)desc+=" (day "+cr.days.join(", ")+")";
+        if(cr.freq==="quarterly")desc+=" (day "+cr.dayOfMonth+")";
+        if(cr.freq==="weekly")desc+=" ("+["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][cr.dayOfWeek||0]+")";
+        row.appendChild(el("span",{fontSize:"11px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1"},{textContent:desc}));
+        const delBtn=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",border:"1px solid #FCA5A5",background:"#FEE2E2",color:"#991b1b",cursor:"pointer",fontWeight:"600",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"✕"});
+        delBtn.addEventListener("click",()=>{
+          custom.splice(idx,1);saveCustomRecurring(custom);renderRecurringEditor(dc);
+        });
+        row.appendChild(delBtn);
+        box.appendChild(row);
+      });
+
+      // Add new recurring task form
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Add new"}));
+      const form=el("div",{background:"#f9fafb",borderRadius:"8px",padding:"10px"});
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Title"}));
+      const titleInp=mkInput("text",null,"Task name");form.appendChild(titleInp);
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Frequency"}));
+      const freqSel=document.createElement("select");
+      Object.assign(freqSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+      [["monthly","Monthly"],["quarterly","Quarterly"],["weekly","Weekly"]].forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;freqSel.appendChild(o);});
+      form.appendChild(freqSel);
+      const detailDiv=el("div",{marginTop:"8px"});
+      function renderFreqDetail(){
+        detailDiv.innerHTML="";
+        if(freqSel.value==="monthly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day(s) of month (comma-separated)"}));
+          const dayInp=mkInput("text","recDays","e.g. 1, 15");detailDiv.appendChild(dayInp);
+        } else if(freqSel.value==="quarterly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of month"}));
+          const dayInp=mkInput("text","recDay","e.g. 15");detailDiv.appendChild(dayInp);
+        } else if(freqSel.value==="weekly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of week"}));
+          const dowSel=document.createElement("select");
+          Object.assign(dowSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+          dowSel.id="recDow";
+          ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].forEach((d,i)=>{const o=document.createElement("option");o.value=i;o.textContent=d;dowSel.appendChild(o);});
+          dowSel.value="1";
+          detailDiv.appendChild(dowSel);
+        }
+      }
+      freqSel.addEventListener("change",renderFreqDetail);
+      renderFreqDetail();
+      form.appendChild(detailDiv);
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Effort"}));
+      const effSel=document.createElement("select");
+      Object.assign(effSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+      ["Quick","Medium","Deep"].forEach(e=>{const o=document.createElement("option");o.value=e;o.textContent=e;effSel.appendChild(o);});
+      effSel.value="Medium";
+      form.appendChild(effSel);
+      const addBtn=el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add recurring task"});
+      addBtn.addEventListener("click",()=>{
+        const title=titleInp.value.trim();
+        if(!title)return;
+        const freq=freqSel.value;
+        const entry={title,freq,effort:effSel.value};
+        if(freq==="monthly"){
+          const daysStr=(document.getElementById("recDays")||{}).value||"1";
+          entry.days=daysStr.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=31);
+          if(!entry.days.length)entry.days=[1];
+        } else if(freq==="quarterly"){
+          entry.dayOfMonth=parseInt((document.getElementById("recDay")||{}).value)||1;
+        } else if(freq==="weekly"){
+          entry.dayOfWeek=parseInt((document.getElementById("recDow")||{}).value)||1;
+        }
+        custom.push(entry);saveCustomRecurring(custom);renderRecurringEditor(dc);
+      });
+      form.appendChild(addBtn);
+      box.appendChild(form);
+      dc.appendChild(box);
+    }
 
     // ── Matrix tab ────────────────────────────────────────────
     let mxFilters={task:true,discuss:true,waiting:true,delegated:true};
