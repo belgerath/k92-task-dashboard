@@ -349,8 +349,12 @@
             (t.title && m.subject && t.title===m.subject)
           );
           if(existing){
-            // Backfill conversationId if missing (helps future dedup)
-            if(!existing.conversationId && m.conversationId){existing.conversationId=m.conversationId;saveTasks();}
+            // Backfill conversationId and sender if missing
+            let changed=false;
+            if(!existing.conversationId && m.conversationId){existing.conversationId=m.conversationId;changed=true;}
+            const fromN=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
+            if(!existing.sender && fromN){existing.sender=fromN;changed=true;}
+            if(changed)saveTasks();
             return;
           }
           const found=(m.categories||[]).find(c=>catMap[c]);
@@ -359,7 +363,8 @@
           const defaultDays=found==="High"?2:found==="Med"?7:14;
           const due=new Date(localToday().getTime()+defaultDays*864e5);
           const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
-          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null});
+          const fromName=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
+          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null,sender:fromName});
         });
         saveTasks();
         flaggedEmails=[];
@@ -389,7 +394,14 @@
         card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";
         if(noteTip){noteTip.remove();noteTip=null;}
       });
-      card.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",marginBottom:"5px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:t.title}));
+      // Title row with sender in top-right
+      const titleRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"6px",marginBottom:"5px"});
+      titleRow.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",minWidth:"0",overflow:"hidden",textOverflow:"ellipsis"},{textContent:t.title}));
+      if(t.sender){
+        const senderName=t.sender.split(" ")[0];
+        titleRow.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"500"},{textContent:senderName}));
+      }
+      card.appendChild(titleRow);
       const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});
       meta.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:c,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:dl}));
       if(t.importance)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+t.importance}));
@@ -425,6 +437,19 @@
         });
         br.appendChild(snoozeWrap);
       } else { br.appendChild(el("div",{})); }
+      // Edit button — switch to Email tab with task loaded for editing
+      const eb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✎ Edit"});
+      eb.addEventListener("click",()=>{
+        // Load this task into the Email tab edit mode
+        currentTaskId=t.id;
+        currentEmailSubject=t.title;
+        currentEmailId=t.emailId||null;
+        saved={type:t.type,effort:t.effort||"",importance:t.importance||null,dueDate:t.dueDate||"",delegateTo:t.delegateTo||"",waitingWho:t.waitingWho||"",notes:t.notes||""};
+        form={...saved};
+        mode="edit";
+        switchTab("Email");
+        renderEmail();
+      });
       const cb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
         // Use Graph API to swap categories and archive
@@ -446,7 +471,10 @@
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
       });
-      br.appendChild(cb);card.appendChild(br);
+      const rightBtns=el("div",{display:"flex",gap:"4px"});
+      if(!t.recurring)rightBtns.appendChild(eb);
+      rightBtns.appendChild(cb);
+      br.appendChild(rightBtns);card.appendChild(br);
       return card;
     }
 
@@ -849,6 +877,7 @@
       if(currentTaskId!==null)removeTask(currentTaskId);
       taskObj.id=nid++;taskObj.emailId=currentEmailId;
       try{ taskObj.conversationId=Office.context.mailbox.item.conversationId||null; }catch(e){ taskObj.conversationId=null; }
+      try{const f=Office.context.mailbox.item.from;taskObj.sender=f&&f.displayName?f.displayName:"";}catch(e){taskObj.sender="";}
       tasks.push(taskObj);currentTaskId=taskObj.id;
       saveTasks();applyOutlookColour(taskObj);
     }
@@ -906,7 +935,7 @@
       if(card.lastChild&&card.lastChild.style)card.lastChild.style.borderBottom="none";
       es.appendChild(card);
       // Keyboard hint for view mode
-      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"6px"},{textContent:"Shortcut: 1=Edit  2=Archive  3=Complete  4=Cancel"}));
+      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"6px"},{textContent:"Shortcut: 1=Edit  2=Complete & archive  3=Cancel"}));
       const editBtn=mkBtn("Edit task","#fff","#333","1px solid #ccc");
       editBtn.addEventListener("click",()=>{form={...saved};mode="edit";renderEmail();});es.appendChild(editBtn);
       const cmpBtn=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");
@@ -925,14 +954,6 @@
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
         saved={};mode="new";renderEmail();renderDash();
       });es.appendChild(cmpBtn);
-      const cmpNoArchBtn=mkBtn("Mark complete (no archive)","#fff","#085041","1px solid #9FE1CB");
-      cmpNoArchBtn.addEventListener("click",()=>{
-        removeOutlookColour();
-        if(currentTaskId!==null)removeTask(currentTaskId);
-        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
-        saved={};mode="new";renderEmail();renderDash();
-        setStatus("Task completed.",3000);
-      });es.appendChild(cmpNoArchBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
       canBtn.addEventListener("click",()=>{
         clearOutlookColour();
@@ -1018,11 +1039,11 @@
       if(!emailTab||!emailTab.classList.contains("active"))return;
       if(typeKey){
         if(mode==="view"){
-          // View mode: 1=Edit, 2=Complete & archive, 3=Complete (no archive), 4=Cancel
+          // View mode: 1=Edit, 2=Complete & archive, 3=Cancel
           const es=document.getElementById("eState");
           if(!es)return;
           const btns=es.querySelectorAll("button");
-          const idx={"1":0,"2":1,"3":2,"4":3}[e.key];
+          const idx={"1":0,"2":1,"3":2}[e.key];
           if(idx!==undefined&&btns[idx]){e.preventDefault();btns[idx].click();}
           return;
         }
@@ -1091,6 +1112,7 @@
           const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
           const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:snapEmailId};
           try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
+          try{const f=Office.context.mailbox.item.from;autoTask.sender=f&&f.displayName?f.displayName:"";}catch(e){autoTask.sender="";}
           tasks.push(autoTask);saveTasks();
           currentTaskId=autoTask.id;
           saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",notes:""};

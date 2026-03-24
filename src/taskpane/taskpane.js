@@ -79,7 +79,7 @@ async function graphScanCategorizedEmails() {
   const result = await graphFetch(
     "/me/mailFolders/inbox/messages?$filter=" +
       encodeURIComponent(filter) +
-      "&$select=id,subject,receivedDateTime,categories,conversationId" +
+      "&$select=id,subject,receivedDateTime,categories,conversationId,from" +
       "&$orderby=receivedDateTime desc&$top=50"
   );
   return result && result.value ? result.value : [];
