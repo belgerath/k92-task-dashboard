@@ -723,6 +723,18 @@
         mode="view";renderEmail();
       });
       es.appendChild(addBtn);
+      const cancelBtn=mkBtn("Cancel","#fff","#475467","1px solid #d0d5dd");
+      cancelBtn.style.display="none";
+      cancelBtn.addEventListener("click",()=>{
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        mode="new";renderEmail();
+      });
+      // Show cancel when a type is selected
+      const origCb=tg._typeCb;
+      const showBoth=()=>{addBtn.style.display="block";cancelBtn.style.display="block";};
+      tg.querySelectorAll("button").forEach(b=>{b.addEventListener("click",showBoth);});
+      if(form.type){cancelBtn.style.display="block";}
+      es.appendChild(cancelBtn);
     }
 
     function renderView(){
