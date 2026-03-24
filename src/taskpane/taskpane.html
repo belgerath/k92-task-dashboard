@@ -154,9 +154,30 @@
       Object.keys(TL).forEach(t=>{ const b=el("button",{},{textContent:TL[t]}); b.dataset.type=t; sType(b,t===cur); b.addEventListener("click",()=>{ g.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===t)); if(cb)cb(t); }); g.appendChild(b); });
       return g;
     }
+    // Arrow-key navigation for button groups
+    function addArrowNav(container,className){
+      container.addEventListener("keydown",e=>{
+        const btns=Array.from(container.querySelectorAll("button"));
+        const idx=btns.indexOf(document.activeElement);
+        if(idx<0)return;
+        if(e.key==="ArrowRight"||e.key==="ArrowDown"){e.preventDefault();const next=btns[(idx+1)%btns.length];next.focus();next.click();}
+        else if(e.key==="ArrowLeft"||e.key==="ArrowUp"){e.preventDefault();const prev=btns[(idx-1+btns.length)%btns.length];prev.focus();prev.click();}
+        else if(e.key==="Enter"||e.key==="Tab"){
+          if(e.key==="Enter")e.preventDefault();
+          // Move focus to next field group
+          const allGroups=Array.from(document.querySelectorAll(".kb-group"));
+          const gi=allGroups.indexOf(container);
+          if(gi>=0&&gi<allGroups.length-1){e.preventDefault();const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
+        }
+      });
+      container.classList.add("kb-group");
+      // Make first button focusable
+      container.setAttribute("tabindex","-1");
+    }
     function mkEffortRow(cur,onSelect) {
       const r=el("div",{display:"flex",gap:"4px"});
       ["Quick","Medium","Deep"].forEach(e=>{ const b=el("button",{},{textContent:e}); b.dataset.e=e; sEff(b,!!cur&&e===cur); b.addEventListener("click",()=>{ r.querySelectorAll("button").forEach(x=>sEff(x,x.dataset.e===e)); if(onSelect)onSelect(e); }); r.appendChild(b); });
+      addArrowNav(r);
       return r;
     }
     function mkImportanceRow(cur, onSelect) {
@@ -173,6 +194,7 @@
         });
         r.appendChild(b);
       }
+      addArrowNav(r);
       const hint=el("div",{fontSize:"9px",color:"#aaa",fontFamily:"Arial,sans-serif",marginTop:"2px",display:"flex",justifyContent:"space-between"});
       hint.appendChild(el("span",{},{textContent:"Low"}));
       hint.appendChild(el("span",{},{textContent:"High"}));
@@ -189,32 +211,33 @@
       Object.assign(pill.style,{background:c[0],color:c[1],border:"1px solid "+c[2]});
       pill.textContent="Will be tagged "+p.lbl+" in Outlook ("+d+" day"+(d===1?"":"s")+" away — "+p.l+" priority)";
     }
+    function wrapKbGroup(input){const w=el("div",{});w.classList.add("kb-group");w.appendChild(input);return w;}
     function buildFields(type,form,container) {
       container.innerHTML="";
       if(type==="waiting"){
-        container.appendChild(mkLbl("EXPECTED BY")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("EXPECTED BY")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
         container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
-        container.appendChild(mkLbl("WAITING ON")); const fw=mkInput("text","fWho","Person / organisation"); fw.value=form.waitingWho||""; fw.addEventListener("input",e=>form.waitingWho=e.target.value); container.appendChild(fw);
-        container.appendChild(mkLbl("WHAT ARE YOU WAITING FOR?")); const fn=mkTextarea("fNotes","Describe what you need..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkLbl("WAITING ON")); const fw=mkInput("text","fWho","Person / organisation"); fw.value=form.waitingWho||""; fw.addEventListener("input",e=>form.waitingWho=e.target.value); container.appendChild(wrapKbGroup(fw));
+        container.appendChild(mkLbl("WHAT ARE YOU WAITING FOR?")); const fn=mkTextarea("fNotes","Describe what you need..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(mkPill("Will be tagged purple in Outlook","#EEEDFE","#3C3489","#AFA9EC"));
       } else if(type==="delegated"){
-        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
         container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
-        container.appendChild(mkLbl("DELEGATE TO")); const fw=mkInput("text","fWho","Team member name"); fw.value=form.delegateTo||""; fw.addEventListener("input",e=>form.delegateTo=e.target.value); container.appendChild(fw);
-        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkLbl("DELEGATE TO")); const fw=mkInput("text","fWho","Team member name"); fw.value=form.delegateTo||""; fw.addEventListener("input",e=>form.delegateTo=e.target.value); container.appendChild(wrapKbGroup(fw));
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(mkPill("Will be tagged gray in Outlook","#f0f0f0","#555","#ddd"));
       } else if(type==="discuss"){
-        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(fd);
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
         container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
-        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(mkPill("Will appear in Discuss section","#FAEEDA","#633806","#FAC775"));
       } else if(type==="task"){
         container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value;
         const pill=mkTaskColourPill();
-        fd.addEventListener("change",e=>{form.dueDate=e.target.value;updateTaskColourPill(pill,form.dueDate);}); container.appendChild(fd);
+        fd.addEventListener("change",e=>{form.dueDate=e.target.value;updateTaskColourPill(pill,form.dueDate);}); container.appendChild(wrapKbGroup(fd));
         container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
         container.appendChild(mkLbl("EFFORT")); const er=mkEffortRow(form.effort||"",v=>form.effort=v); container.appendChild(er);
-        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(fn);
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(pill); if(form.dueDate)updateTaskColourPill(pill,form.dueDate);
       }
     }
@@ -714,26 +737,22 @@
       es.appendChild(mkLbl("TASK TYPE"));
       const fieldsDiv=el("div",{});
       const addBtn=el("button",{width:"100%",padding:"10px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",display:"none",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add to tasks"});
-      const tg=mkTypeGrid(form.type,t=>{form.type=t;buildFields(t,form,fieldsDiv);addBtn.style.display="block";});
-      tg.style.marginTop="4px";es.appendChild(tg);es.appendChild(fieldsDiv);
-      if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";}
-      addBtn.addEventListener("click",()=>{
-        saved={...form};
-        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
-        mode="view";renderEmail();
-      });
-      es.appendChild(addBtn);
+      addBtn.classList.add("kb-group");
       const cancelBtn=mkBtn("Cancel","#fff","#475467","1px solid #d0d5dd");
       cancelBtn.style.display="none";
       cancelBtn.addEventListener("click",()=>{
         form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
         mode="new";renderEmail();
       });
-      // Show cancel when a type is selected
-      const origCb=tg._typeCb;
-      const showBoth=()=>{addBtn.style.display="block";cancelBtn.style.display="block";};
-      tg.querySelectorAll("button").forEach(b=>{b.addEventListener("click",showBoth);});
-      if(form.type){cancelBtn.style.display="block";}
+      const tg=mkTypeGrid(form.type,t=>{form.type=t;buildFields(t,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";setTimeout(()=>{const fd=document.getElementById("fDate");if(fd)fd.focus();},50);});
+      tg.style.marginTop="4px";es.appendChild(tg);es.appendChild(fieldsDiv);
+      if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";}
+      addBtn.addEventListener("click",()=>{
+        saved={...form};
+        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
+        mode="view";renderEmail();
+      });
+      es.appendChild(addBtn);
       es.appendChild(cancelBtn);
     }
 
@@ -861,9 +880,9 @@
         const emailTab=document.getElementById("pEmail");
         if(!emailTab||!emailTab.classList.contains("active"))return;
         if(mode!=="new"&&mode!=="edit")return;
-        // Find the type grid button and click it
+        // Find the type grid button and click it, then focus date field
         const btn=emailTab.querySelector('button[data-type="'+typeKey+'"]');
-        if(btn){btn.click();e.preventDefault();}
+        if(btn){btn.click();e.preventDefault();setTimeout(()=>{const fd=document.getElementById("fDate");if(fd)fd.focus();},80);}
       }
     });
 
