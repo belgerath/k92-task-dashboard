@@ -1107,10 +1107,15 @@
     }
 
     function addOrReplace(taskObj){
+      // Preserve sender from previous version of this task
+      const prevTask=currentTaskId!==null?tasks.find(t=>t.id===currentTaskId):null;
+      const prevSender=prevTask?prevTask.sender:"";
       if(currentTaskId!==null)removeTask(currentTaskId);
       taskObj.id=nid++;taskObj.emailId=currentEmailId;
       try{ taskObj.conversationId=Office.context.mailbox.item.conversationId||null; }catch(e){ taskObj.conversationId=null; }
-      try{const f=Office.context.mailbox.item.from;taskObj.sender=f&&f.displayName?f.displayName:"";}catch(e){taskObj.sender="";}
+      // Only capture sender from selected email if it matches AND no previous sender
+      if(prevSender){taskObj.sender=prevSender;}
+      else{try{const item=Office.context.mailbox.item;if(item&&item.itemId===currentEmailId){const f=item.from;taskObj.sender=f&&f.displayName?f.displayName:"";}else{taskObj.sender="";}}catch(e){taskObj.sender="";}}
       tasks.push(taskObj);currentTaskId=taskObj.id;
       saveTasks();applyOutlookColour(taskObj);
     }
