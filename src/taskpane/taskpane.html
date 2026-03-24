@@ -500,8 +500,22 @@
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
         renderDash();
       });
+      // Cancel button — remove categories, no archive
+      const xb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #F7C1C1",background:"#FCEBEB",color:"#791F1F",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✕"});
+      xb.addEventListener("click",()=>{
+        if(t.emailId && window.k92Graph){
+          window.k92Graph.setCategories(t.emailId,[]).catch(e=>console.error("Graph clear failed:",e));
+        }
+        if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+          (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+          clearOutlookColour();
+        }
+        if(!t.recurring){removeTask(t.id);}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        renderDash();
+      });
       const rightBtns=el("div",{display:"flex",gap:"4px"});
-      if(!t.recurring)rightBtns.appendChild(eb);
+      if(!t.recurring){rightBtns.appendChild(eb);rightBtns.appendChild(xb);}
       rightBtns.appendChild(cb);
       br.appendChild(rightBtns);card.appendChild(br);
       return card;
