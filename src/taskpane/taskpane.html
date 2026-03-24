@@ -34,6 +34,7 @@
   <div class="tabs">
     <button class="tab on" id="tabEmail">Email</button>
     <button class="tab" id="tabDash">Dashboard</button>
+    <button class="tab" id="tabTiles">Tiles</button>
     <button class="tab" id="tabMatrix">Matrix</button>
   </div>
   <div class="sidebar-content">
@@ -47,6 +48,9 @@
       <button class="ntb" id="newTaskBtn">+ New manual task</button>
       <div id="mForm" style="display:none"></div>
       <div id="dContent"></div>
+    </div>
+    <div class="tc" id="pTiles">
+      <div id="tilesContent"></div>
     </div>
     <div class="tc" id="pMatrix">
       <div id="mxContent"></div>
@@ -682,6 +686,192 @@
       dc.appendChild(box);
     }
 
+    // ── Tiles tab (Today's Plan) ─────────────────────────────
+    const ZONES=["now","next","later","nottoday"];
+    const ZONE_META={
+      now:{label:"Do Now",color:"#DC2626",bg:"#FEF2F2",border:"#FCA5A5",icon:"🔴",max:2,desc:"Your #1 focus right now"},
+      next:{label:"Do Next",color:"#D97706",bg:"#FFFBEB",border:"#FCD34D",icon:"🟡",max:3,desc:"Up next when you finish"},
+      later:{label:"Later Today",color:"#0078D4",bg:"#EFF6FF",border:"#93C5FD",icon:"🔵",max:null,desc:"Get to these if time permits"},
+      nottoday:{label:"Not Today",color:"#6B7280",bg:"#F9FAFB",border:"#D1D5DB",icon:"⚪",max:null,desc:"Parked — revisit tomorrow"}
+    };
+
+    function loadTilesDate(){try{return localStorage.getItem("k92tilesDate")||"";}catch(e){return"";}}
+    function saveTilesDate(d){try{localStorage.setItem("k92tilesDate",d);}catch(e){}}
+
+    function autoAssignZone(t){
+      // Score: higher = more urgent/important → Do Now
+      const imp=t.importance||3;
+      const urgency=t.days<=0?10:t.days<=1?8:t.days<=2?6:t.days<=5?4:t.days<=7?3:1;
+      return imp*2+urgency;
+    }
+
+    function resetTilesIfNewDay(){
+      const today=dateStr(localToday());
+      if(loadTilesDate()!==today){
+        // Clear zone assignments for a fresh day
+        tasks.forEach(t=>{delete t.zone;});
+        saveTasks();
+        saveTilesDate(today);
+      }
+    }
+
+    function assignDefaultZones(){
+      refreshDays(tasks);
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.dueDate===r.dueDate));
+      const allTasks=[...tasks,...rec];
+      // Only assign to tasks without a zone
+      const unassigned=allTasks.filter(t=>!t.zone);
+      if(!unassigned.length)return allTasks;
+      // Score and sort
+      unassigned.sort((a,b)=>autoAssignZone(b)-autoAssignZone(a));
+      // Fill zones respecting max limits
+      let nowCount=allTasks.filter(t=>t.zone==="now").length;
+      let nextCount=allTasks.filter(t=>t.zone==="next").length;
+      unassigned.forEach(t=>{
+        if(nowCount<2){t.zone="now";nowCount++;}
+        else if(nextCount<3){t.zone="next";nextCount++;}
+        else if(t.days>=0&&t.days<=7){t.zone="later";}
+        else{t.zone="nottoday";}
+      });
+      saveTasks();
+      return allTasks;
+    }
+
+    function tileSizeStyle(effort){
+      if(effort==="Deep")return{minHeight:"80px",padding:"12px"};
+      if(effort==="Quick")return{minHeight:"44px",padding:"8px 10px"};
+      return{minHeight:"58px",padding:"10px 11px"}; // Medium/default
+    }
+
+    function renderTiles(){
+      resetTilesIfNewDay();
+      const tc=document.getElementById("tilesContent");tc.innerHTML="";
+      refreshDays(tasks);
+      const allTasks=assignDefaultZones();
+
+      // Header
+      const hdr=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"});
+      hdr.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Today's Plan"}));
+      const resetBtn=el("button",{fontSize:"9px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"↻ Reset"});
+      resetBtn.addEventListener("click",()=>{
+        tasks.forEach(t=>{delete t.zone;});saveTasks();renderTiles();
+      });
+      hdr.appendChild(resetBtn);
+      tc.appendChild(hdr);
+
+      // Render each zone
+      ZONES.forEach(zoneId=>{
+        const zm=ZONE_META[zoneId];
+        const zoneTasks=allTasks.filter(t=>t.zone===zoneId).sort((a,b)=>autoAssignZone(b)-autoAssignZone(a));
+
+        // Zone header
+        const zoneWrap=el("div",{marginBottom:"10px"});
+        const zHdr=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:"8px",background:zm.bg,border:"1px solid "+zm.border,marginBottom:"4px"});
+        const zLeft=el("div",{display:"flex",alignItems:"center",gap:"6px"});
+        zLeft.appendChild(el("span",{fontSize:"11px"},{textContent:zm.icon}));
+        zLeft.appendChild(el("span",{fontSize:"11.5px",fontWeight:"700",color:zm.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zm.label}));
+        if(zm.max)zLeft.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"(max "+zm.max+")"}));
+        zHdr.appendChild(zLeft);
+        zHdr.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:zm.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zoneTasks.length}));
+        zoneWrap.appendChild(zHdr);
+
+        // Zone description if empty
+        if(!zoneTasks.length){
+          zoneWrap.appendChild(el("div",{fontSize:"10px",color:"#98a2b3",padding:"8px 10px",textAlign:"center",fontStyle:"italic",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zm.desc}));
+        }
+
+        // Task tiles
+        zoneTasks.forEach(t=>{
+          const sizeS=tileSizeStyle(t.effort);
+          const c=priColor(t.days);
+          const tile=el("div",{...sizeS,background:"#fff",border:"1px solid #e5e7eb",borderRadius:"8px",marginBottom:"3px",borderLeft:"3px solid "+c,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",justifyContent:"space-between"});
+
+          // Top row: title + sender
+          const topRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"4px"});
+          topRow.appendChild(el("div",{fontSize:"11px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.3",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",overflow:"hidden",textOverflow:"ellipsis"},{textContent:t.title}));
+          if(t.sender)topRow.appendChild(el("span",{fontSize:"8px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(t.sender)}));
+          tile.appendChild(topRow);
+
+          // Bottom row: meta + move buttons
+          const botRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"4px"});
+          const metaSpan=el("div",{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"});
+          const dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"today":t.days+"d";
+          metaSpan.appendChild(el("span",{fontSize:"9px",fontWeight:"700",color:c,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:dl}));
+          if(t.importance)metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+t.importance}));
+          const typeCol=TC[t.type]||"#666";
+          metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:typeCol,color:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:TL[t.type]||t.type}));
+          if(t.effort)metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:t.effort}));
+          botRow.appendChild(metaSpan);
+
+          // Move buttons
+          const moveWrap=el("div",{display:"flex",gap:"2px"});
+          const zi=ZONES.indexOf(zoneId);
+          if(zi>0){
+            const upBtn=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▲"});
+            upBtn.title="Move to "+ZONE_META[ZONES[zi-1]].label;
+            upBtn.addEventListener("click",()=>{
+              // Check max of target zone
+              const targetZone=ZONES[zi-1];
+              const targetMax=ZONE_META[targetZone].max;
+              const targetCount=allTasks.filter(x=>x.zone===targetZone).length;
+              if(targetMax&&targetCount>=targetMax){
+                // Swap: move the lowest-scored task in target zone down
+                const targetTasks=allTasks.filter(x=>x.zone===targetZone).sort((a,b)=>autoAssignZone(a)-autoAssignZone(b));
+                if(targetTasks.length){
+                  const bumped=targetTasks[0];
+                  const real=tasks.find(x=>x.id===bumped.id);
+                  if(real)real.zone=zoneId;
+                }
+              }
+              const real=tasks.find(x=>x.id===t.id);
+              if(real)real.zone=targetZone;
+              saveTasks();renderTiles();
+            });
+            moveWrap.appendChild(upBtn);
+          }
+          if(zi<ZONES.length-1){
+            const dnBtn=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▼"});
+            dnBtn.title="Move to "+ZONE_META[ZONES[zi+1]].label;
+            dnBtn.addEventListener("click",()=>{
+              const real=tasks.find(x=>x.id===t.id);
+              if(real)real.zone=ZONES[zi+1];
+              saveTasks();renderTiles();
+            });
+            moveWrap.appendChild(dnBtn);
+          }
+          botRow.appendChild(moveWrap);
+          tile.appendChild(botRow);
+
+          // Hover effect
+          tile.addEventListener("mouseenter",()=>{tile.style.background="#fafbfc";tile.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";});
+          tile.addEventListener("mouseleave",()=>{tile.style.background="#fff";tile.style.boxShadow="0 1px 2px rgba(0,0,0,0.04)";});
+          // Click to open email
+          tile.style.cursor="pointer";
+          tile.addEventListener("click",(ev)=>{
+            if(ev.target.tagName==="BUTTON")return;
+            if(t.emailId){try{Office.context.mailbox.displayMessageForm(t.emailId);}catch(e){}}
+          });
+
+          zoneWrap.appendChild(tile);
+        });
+
+        tc.appendChild(zoneWrap);
+      });
+
+      // Summary footer
+      const nowTasks=allTasks.filter(t=>t.zone==="now");
+      const nextTasks=allTasks.filter(t=>t.zone==="next");
+      const totalFocus=nowTasks.length+nextTasks.length;
+      const effortMap={Quick:15,Medium:45,Deep:120};
+      const totalMins=[...nowTasks,...nextTasks].reduce((s,t)=>s+(effortMap[t.effort]||30),0);
+      const hrs=Math.floor(totalMins/60);
+      const mins=totalMins%60;
+      const timeStr=hrs?hrs+"h"+(mins?" "+mins+"m":""):mins+"m";
+      const footer=el("div",{fontSize:"10px",color:"#667085",padding:"8px 10px",textAlign:"center",fontFamily:"'Segoe UI',Arial,sans-serif",borderTop:"1px solid #e5e7eb",marginTop:"6px"});
+      footer.textContent=totalFocus+" focused task"+(totalFocus!==1?"s":"")+" · est. "+timeStr+" · ▲▼ to reprioritize";
+      tc.appendChild(footer);
+    }
+
     // ── Matrix tab ────────────────────────────────────────────
     let mxFilters={task:true,discuss:true,waiting:true,delegated:true};
 
@@ -1065,22 +1255,24 @@
 
     // ── Tab switching ─────────────────────────────────────────
     function switchTab(active){
-      ["Email","Dash","Matrix"].forEach(n=>{
+      ["Email","Dash","Tiles","Matrix"].forEach(n=>{
         document.getElementById("p"+n).classList.toggle("active",n===active);
         document.getElementById("tab"+n).classList.toggle("on",n===active);
       });
     }
     document.getElementById("tabEmail").addEventListener("click",()=>switchTab("Email"));
     document.getElementById("tabDash").addEventListener("click",()=>{switchTab("Dash");loadFlaggedEmails(renderDash);});
+    document.getElementById("tabTiles").addEventListener("click",()=>{switchTab("Tiles");renderTiles();});
     document.getElementById("tabMatrix").addEventListener("click",()=>{switchTab("Matrix");renderMatrix();});
 
     // ── Keyboard shortcuts ────────────────────────────────────
     const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated"};
     document.addEventListener("keydown",e=>{
-      // Alt+1/2/3 = tab switching (always active)
+      // Alt+1/2/3/4 = tab switching (always active)
       if(e.altKey&&e.key==="1"){e.preventDefault();switchTab("Email");return;}
       if(e.altKey&&e.key==="2"){e.preventDefault();switchTab("Dash");loadFlaggedEmails(renderDash);return;}
-      if(e.altKey&&e.key==="3"){e.preventDefault();switchTab("Matrix");renderMatrix();return;}
+      if(e.altKey&&e.key==="3"){e.preventDefault();switchTab("Tiles");renderTiles();return;}
+      if(e.altKey&&e.key==="4"){e.preventDefault();switchTab("Matrix");renderMatrix();return;}
       // Skip if user is typing in an input/textarea
       const tag=document.activeElement&&document.activeElement.tagName;
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
