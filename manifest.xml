@@ -4,7 +4,7 @@
   <Version>1.0.0.3</Version>
   <ProviderName>K92 Mining Inc</ProviderName>
   <DefaultLocale>en-US</DefaultLocale>
-  <DisplayName DefaultValue="K92 Task Dashboard"/>
+  <DisplayName DefaultValue="Tasks"/>
   <Description DefaultValue="K92 Task Dashboard — personal task management for Outlook."/>
   <IconUrl DefaultValue="https://belgerath.github.io/k92-task-dashboard/icon-64.png"/>
   <HighResolutionIconUrl DefaultValue="https://belgerath.github.io/k92-task-dashboard/icon-128.png"/>
@@ -81,12 +81,12 @@
       </bt:Urls>
       <bt:ShortStrings>
         <bt:String id="GroupLabel" DefaultValue="K92 Mining"/>
-        <bt:String id="TaskpaneButton.Label" DefaultValue="K92 Task Dashboard"/>
-        <bt:String id="ActionButton.Label" DefaultValue="K92 Task Dashboard"/>
+        <bt:String id="TaskpaneButton.Label" DefaultValue="Tasks"/>
+        <bt:String id="ActionButton.Label" DefaultValue="Tasks"/>
       </bt:ShortStrings>
       <bt:LongStrings>
-        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the K92 Task Dashboard."/>
-        <bt:String id="ActionButton.Tooltip" DefaultValue="Open the K92 Task Dashboard."/>
+        <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open your task dashboard."/>
+        <bt:String id="ActionButton.Tooltip" DefaultValue="Open your task dashboard."/>
       </bt:LongStrings>
     </Resources>
     <VersionOverrides xmlns="http://schemas.microsoft.com/office/mailappversionoverrides/1.1" xsi:type="VersionOverridesV1_1">
@@ -137,12 +137,12 @@
         </bt:Urls>
         <bt:ShortStrings>
           <bt:String id="GroupLabel" DefaultValue="K92 Mining"/>
-          <bt:String id="TaskpaneButton.Label" DefaultValue="K92 Task Dashboard"/>
-          <bt:String id="ActionButton.Label" DefaultValue="K92 Task Dashboard"/>
+          <bt:String id="TaskpaneButton.Label" DefaultValue="Tasks"/>
+          <bt:String id="ActionButton.Label" DefaultValue="Tasks"/>
         </bt:ShortStrings>
         <bt:LongStrings>
-          <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open the K92 Task Dashboard."/>
-          <bt:String id="ActionButton.Tooltip" DefaultValue="Open the K92 Task Dashboard."/>
+          <bt:String id="TaskpaneButton.Tooltip" DefaultValue="Open your task dashboard."/>
+          <bt:String id="ActionButton.Tooltip" DefaultValue="Open your task dashboard."/>
         </bt:LongStrings>
       </Resources>
       <WebApplicationInfo>
