@@ -111,12 +111,9 @@
     function removePending(emailId){const p=loadPending().filter(id=>id!==emailId);savePending(p);}
     function isPending(emailId){return loadPending().includes(emailId);}
 
-    // ── EWS ID — in Classic Outlook desktop itemId is already EWS format
-    function toEwsId(id) { return id; }
-
     // ── Date helpers ──────────────────────────────────────────
     function localToday() { const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
-    function daysFromDate(d) { if(!d)return 5; const p=d.split('-').map(Number); return Math.round((new Date(p[0],p[1]-1,p[2])-localToday())/864e5); }
+    function daysFromDate(d) { if(!d)return 7; const p=d.split('-').map(Number); return Math.round((new Date(p[0],p[1]-1,p[2])-localToday())/864e5); }
     function fmtD(d) { if(!d)return"—"; const p=d.split("-"); if(p.length!==3)return d; return parseInt(p[2])+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1])-1]+" "+p[0]; }
     function dateStr(dt) { return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
     const pri = d => d<=2?{l:"High",c:"#DC2626",lbl:"red"}:d<=7?{l:"Medium",c:"#EA580C",lbl:"orange"}:{l:"Low",c:"#16A34A",lbl:"green"};
@@ -246,7 +243,7 @@
     function loadTasks(){try{return JSON.parse(localStorage.getItem('k92tasks')||'[]');}catch(e){return[];}}
     function saveTasks(){try{localStorage.setItem('k92tasks',JSON.stringify(tasks));}catch(e){}}
     const tasks=loadTasks();
-    let nid=tasks.length>0?Math.max(...tasks.map(t=>t.id))+1:1;
+    let nid=tasks.length>0?Math.max(1,...tasks.map(t=>typeof t.id==="number"?t.id:0))+1:1;
     function removeTask(id){const i=tasks.findIndex(t=>t.id===id);if(i>-1){tasks.splice(i,1);saveTasks();}}
 
     // ── Recurring tasks ───────────────────────────────────────
@@ -270,75 +267,19 @@
 
     const priColor=d=>d<=2?"#DC2626":d<=7?"#EA580C":"#16A34A";
     const priLabel=d=>d<=2?"High":d<=7?"Medium":"Low";
-    let expSec="";
+    let expSec="high";
 
-    // ── Flagged emails (EWS) ──────────────────────────────────
+    // ── Inbox scan ────────────────────────────────────────────
     let flaggedEmails=[];
     let flagsLoading=false;
-
-    function buildFlaggedEwsRequest(){
-      return `<?xml version="1.0" encoding="utf-8"?>
-<soap:Envelope xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-               xmlns:m="http://schemas.microsoft.com/exchange/services/2006/messages"
-               xmlns:t="http://schemas.microsoft.com/exchange/services/2006/types"
-               xmlns:soap="http://schemas.xmlsoap.org/soap/envelope/">
-  <soap:Header><t:RequestServerVersion Version="Exchange2013"/></soap:Header>
-  <soap:Body>
-    <m:FindItem Traversal="Shallow">
-      <m:ItemShape>
-        <t:BaseShape>IdOnly</t:BaseShape>
-        <t:AdditionalProperties>
-          <t:FieldURI FieldURI="item:Subject"/>
-          <t:FieldURI FieldURI="item:DateTimeReceived"/>
-        </t:AdditionalProperties>
-      </m:ItemShape>
-      <m:Restriction>
-        <t:IsEqualTo>
-          <t:ExtendedFieldURI PropertyTag="0x1090" PropertyType="Integer"/>
-          <t:FieldURIOrConstant><t:Constant Value="2"/></t:FieldURIOrConstant>
-        </t:IsEqualTo>
-      </m:Restriction>
-      <m:SortOrder>
-        <t:FieldOrder Order="Descending">
-          <t:FieldURI FieldURI="item:DateTimeReceived"/>
-        </t:FieldOrder>
-      </m:SortOrder>
-      <m:ParentFolderIds>
-        <t:DistinguishedFolderId Id="inbox"/>
-      </m:ParentFolderIds>
-    </m:FindItem>
-  </soap:Body>
-</soap:Envelope>`;
-    }
-
-    function getEwsEl(parent,localName){
-      let r=parent.getElementsByTagNameNS('http://schemas.microsoft.com/exchange/services/2006/types',localName);
-      if(r&&r.length>0)return r;
-      r=parent.getElementsByTagName('t:'+localName);
-      if(r&&r.length>0)return r;
-      return parent.getElementsByTagName(localName);
-    }
-
-    function parseFlaggedEmails(xml){
-      try{
-        const doc=new DOMParser().parseFromString(xml,'text/xml');
-        const results=[];
-        const items=getEwsEl(doc,'Message');
-        for(let i=0;i<items.length;i++){
-          const item=items[i];
-          const idEls=getEwsEl(item,'ItemId');
-          const subjEls=getEwsEl(item,'Subject');
-          const dateEls=getEwsEl(item,'DateTimeReceived');
-          if(!idEls||!idEls[0])continue;
-          const received=dateEls&&dateEls[0]?new Date(dateEls[0].textContent):null;
-          const daysAgo=received?Math.floor((new Date()-received)/864e5):null;
-          results.push({itemId:idEls[0].getAttribute('Id'),subject:subjEls&&subjEls[0]?subjEls[0].textContent:'No subject',receivedDate:received,daysAgo:daysAgo});
-        }
-        return results;
-      }catch(e){return[];}
-    }
+    let lastScanTime=0;
+    const SCAN_COOLDOWN=60000; // 60 second debounce
 
     function loadFlaggedEmails(cb){
+      // Debounce: skip if scanned within cooldown period
+      const now=Date.now();
+      if(now-lastScanTime<SCAN_COOLDOWN){if(cb)cb();return;}
+      lastScanTime=now;
       if(!window.k92Graph){if(cb)cb();return;}
       flagsLoading=true;renderDash();
       window.k92Graph.scanCategorizedEmails().then(msgs=>{
@@ -355,8 +296,7 @@
         deduped.forEach(m=>{
           const existing=tasks.find(t=>
             (t.conversationId && m.conversationId && t.conversationId===m.conversationId) ||
-            (t.emailId && t.emailId===m.id) ||
-            (t.title && m.subject && t.title===m.subject)
+            (t.emailId && t.emailId===m.id)
           );
           if(existing)return;
           const found=(m.categories||[]).find(c=>catMap[c]);
@@ -378,27 +318,9 @@
       });
     }
 
-    function flagCard(f){
-      const card=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid #CA8A04",boxShadow:"0 1px 3px rgba(0,0,0,0.04)"});
-      card.addEventListener("mouseenter",()=>{card.style.background="#fafbfc";card.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";});
-      card.addEventListener("mouseleave",()=>{card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";});
-      card.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",marginBottom:"5px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:f.subject}));
-      const meta=el("div",{marginBottom:"7px"});
-      if(f.daysAgo!==null){
-        const label=f.daysAgo===0?"Received today":f.daysAgo===1?"Received yesterday":"Received "+f.daysAgo+"d ago";
-        meta.appendChild(el("span",{fontSize:"10px",color:"#667085",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:label}));
-      }
-      card.appendChild(meta);
-      const br=el("div",{display:"flex",justifyContent:"flex-end"});
-      const openBtn=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #d0d5dd",background:"#fff",color:"#344054",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"Open email"});
-      openBtn.addEventListener("click",()=>{try{Office.context.mailbox.displayMessageForm(f.itemId);}catch(e){}});
-      br.appendChild(openBtn);card.appendChild(br);
-      return card;
-    }
-
     // ── Task cards ────────────────────────────────────────────
     function tCard(t){
-      const c=priColor(t.days),dl=t.days<0?Math.abs(t.days)+"d overdue":t.days<=1?"Due today":t.days+"d left";
+      const c=priColor(t.days),dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"Due today":t.days+"d left";
       const card=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid "+c,boxShadow:"0 1px 3px rgba(0,0,0,0.04)"});
       card.addEventListener("mouseenter",()=>{card.style.background="#fafbfc";card.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";});
       card.addEventListener("mouseleave",()=>{card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";});
@@ -476,11 +398,11 @@
       dc.appendChild(secH("low","#16A34A","Low priority",mine.filter(t=>priLabel(t.days)==="Low")));
       addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",disc));
       addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",del));dc.appendChild(secH("waiting","#7C3AED","Waiting",wait));
-      const refreshBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"↻ Refresh"});
-      refreshBtn.addEventListener("click",()=>loadFlaggedEmails(renderDash));
-      addST(dc,"FOLLOW UP FLAGS",refreshBtn);
-      if(flagsLoading){dc.appendChild(el("div",{fontSize:"11px",color:"#888",fontFamily:"Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for flagged emails…"}));}
-      else{dc.appendChild(secH("flags","#CA8A04","Flagged emails",flaggedEmails,flagCard));}
+      // Sync button to scan inbox for categorized emails
+      const syncBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"↻ Sync inbox"});
+      syncBtn.addEventListener("click",()=>{lastScanTime=0;loadFlaggedEmails(renderDash);});
+      addST(dc,"",syncBtn);
+      if(flagsLoading){dc.appendChild(el("div",{fontSize:"11px",color:"#667085",fontFamily:"'Segoe UI',Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for categorized emails…"}));}
     }
     renderDash();
 
@@ -692,9 +614,6 @@
       mc.appendChild(legWrap);
     }
 
-    // EWS is non-functional in this Exchange environment (empty responses,
-    // token requests blocked). All item operations use Office.js API instead.
-
     // ── Email tab ─────────────────────────────────────────────
     let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
     let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null;
@@ -735,6 +654,8 @@
       const es=document.getElementById("eState");es.innerHTML="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
       es.appendChild(mkLbl("TASK TYPE"));
+      // Keyboard hint
+      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task  2=Discuss  3=Waiting  4=Delegate"}));
       const fieldsDiv=el("div",{});
       const addBtn=el("button",{width:"100%",padding:"10px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",display:"none",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add to tasks"});
       addBtn.classList.add("kb-group");
@@ -748,6 +669,8 @@
       tg.style.marginTop="4px";es.appendChild(tg);es.appendChild(fieldsDiv);
       if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";}
       addBtn.addEventListener("click",()=>{
+        if(!form.type){setStatus("Please select a task type.",3000);return;}
+        if(!form.dueDate){setStatus("Please set a due date.",3000);return;}
         saved={...form};
         addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
         mode="view";renderEmail();
@@ -926,7 +849,12 @@
         currentTaskId=null;mode="new";
         form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};
         // Auto-detect manually applied Outlook categories and create a task
+        // Capture state at call time to prevent race condition during rapid email switching
+        const snapEmailId=currentEmailId;
+        const snapSubject=currentEmailSubject;
         Office.context.mailbox.item.categories.getAsync(catResult=>{
+          // Bail if user has already switched to a different email
+          if(currentEmailId!==snapEmailId){return;}
           if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
           const catNames=catResult.value.map(c=>c.displayName);
           const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
@@ -936,7 +864,7 @@
           const defaultDays=found==="High"?2:found==="Med"?7:14;
           const due=new Date(localToday().getTime()+defaultDays*864e5);
           const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
-          const autoTask={title:currentEmailSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:currentEmailId};
+          const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:snapEmailId};
           try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
           tasks.push(autoTask);saveTasks();
           currentTaskId=autoTask.id;
