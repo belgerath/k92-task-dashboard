@@ -135,7 +135,7 @@
     function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return r+","+g+","+b;}
     function el(tag,styles,props) { const e=document.createElement(tag); if(styles)Object.assign(e.style,styles); if(props)Object.assign(e,props); return e; }
     function mkLbl(text) { return el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",marginTop:"10px",display:"block"},{textContent:text}); }
-    function mkInput(type,id,placeholder) { const i=document.createElement("input"); Object.assign(i.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",display:"block"}); i.type=type; if(id)i.id=id; if(placeholder)i.placeholder=placeholder; return i; }
+    function mkInput(type,id,placeholder) { const i=document.createElement("input"); Object.assign(i.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",display:"block"}); i.type=type; if(id)i.id=id; if(placeholder)i.placeholder=placeholder; if(type==="date"){i.addEventListener("focus",()=>{try{i.showPicker();}catch(e){}});i.addEventListener("change",()=>{setTimeout(()=>{const grps=Array.from(document.querySelectorAll(".kb-group"));const parent=i.closest(".kb-group");const gi=grps.indexOf(parent);if(gi>=0&&gi<grps.length-1){const ng=grps[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}},50);});} return i; }
     function mkTextarea(id,placeholder,rows) { const t=document.createElement("textarea"); Object.assign(t.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",resize:"none",display:"block"}); t.rows=rows||2; if(id)t.id=id; if(placeholder)t.placeholder=placeholder; return t; }
     function mkPill(text,bg,color,border) { return el("div",{background:bg,color:color,border:"1px solid "+border,borderRadius:"8px",padding:"7px 10px",fontSize:"11px",marginTop:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:text}); }
     function mkBtn(text,bg,color,border) { return el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:border||"none",background:bg,color:color,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",display:"block",boxShadow:"0 1px 2px rgba(0,0,0,0.06)"},{textContent:text}); }
@@ -265,7 +265,7 @@
       return recurring;
     }
 
-    const priColor=d=>d<=2?"#DC2626":d<=7?"#EA580C":"#16A34A";
+    const priColor=d=>d<=2?"#DC2626":d<=7?"#D97706":"#16A34A";
     const priLabel=d=>d<=2?"High":d<=7?"Medium":"Low";
     let expSec="high";
 
@@ -394,7 +394,7 @@
       const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting");
       addST(dc,"MY ACTION ITEMS");
       dc.appendChild(secH("high","#DC2626","High priority",mine.filter(t=>priLabel(t.days)==="High")));
-      dc.appendChild(secH("medium","#EA580C","Medium priority",mine.filter(t=>priLabel(t.days)==="Medium")));
+      dc.appendChild(secH("medium","#D97706","Medium priority",mine.filter(t=>priLabel(t.days)==="Medium")));
       dc.appendChild(secH("low","#16A34A","Low priority",mine.filter(t=>priLabel(t.days)==="Low")));
       addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",disc));
       addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",del));dc.appendChild(secH("waiting","#7C3AED","Waiting",wait));
@@ -624,6 +624,11 @@
         Office.context.mailbox.item.categories.addAsync(["To be Archived"],()=>{});
       });
     }
+    // Remove categories without adding pink (for cancel/undo)
+    function clearOutlookColour(){
+      if(!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{});
+    }
 
     function applyOutlookColour(task){
       const days=task.days;let colour;
@@ -723,7 +728,7 @@
       });es.appendChild(cmpNoArchBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
       canBtn.addEventListener("click",()=>{
-        removeOutlookColour();
+        clearOutlookColour();
         if(currentTaskId!==null)removeTask(currentTaskId);
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};mode="new";renderEmail();renderDash();
       });es.appendChild(canBtn);
