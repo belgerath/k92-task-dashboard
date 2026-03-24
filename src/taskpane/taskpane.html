@@ -801,6 +801,10 @@
     // ── Keyboard shortcuts ────────────────────────────────────
     const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated"};
     document.addEventListener("keydown",e=>{
+      // F1/F2/F3 = tab switching (always active)
+      if(e.key==="F1"){e.preventDefault();switchTab("Email");return;}
+      if(e.key==="F2"){e.preventDefault();switchTab("Dash");loadFlaggedEmails(renderDash);return;}
+      if(e.key==="F3"){e.preventDefault();switchTab("Matrix");renderMatrix();return;}
       // Skip if user is typing in an input/textarea
       const tag=document.activeElement&&document.activeElement.tagName;
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
