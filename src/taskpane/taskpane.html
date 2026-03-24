@@ -328,22 +328,25 @@
     let lastScanTime=0;
     const SCAN_COOLDOWN=60000; // 60 second debounce
 
-    // Backfill sender names for tasks that have emailId but no sender
-    function backfillSenders(){
+    // Backfill sender names for tasks — forceAll=true re-fetches even existing senders
+    function backfillSenders(forceAll){
       if(!window.k92Graph||!window.k92Graph.getSender)return;
-      const missing=tasks.filter(t=>t.emailId&&!t.sender);
-      if(!missing.length)return;
-      // Process sequentially to avoid rate limits
+      const targets=forceAll?tasks.filter(t=>t.emailId):tasks.filter(t=>t.emailId&&!t.sender);
+      if(!targets.length)return;
       let i=0;
       function next(){
-        if(i>=missing.length)return;
-        const t=missing[i++];
+        if(i>=targets.length)return;
+        const t=targets[i++];
         window.k92Graph.getSender(t.emailId).then(name=>{
           if(name){t.sender=name;saveTasks();renderDash();}
           next();
         }).catch(()=>next());
       }
       next();
+    }
+    // One-time forced re-fetch of all senders to fix incorrect data
+    if(!localStorage.getItem("k92senderFixV1")){
+      setTimeout(()=>{backfillSenders(true);localStorage.setItem("k92senderFixV1","1");},3000);
     }
 
     function loadFlaggedEmails(cb){
