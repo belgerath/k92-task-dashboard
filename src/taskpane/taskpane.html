@@ -397,6 +397,16 @@
       });
     }
 
+    // Format sender: handle "Last, First" → "First Last", then display as "First L."
+    function fmtSender(name){
+      if(!name)return"";
+      let n=name.trim();
+      // Detect "Last, First" format and flip
+      if(n.indexOf(",")>0){const p=n.split(",").map(s=>s.trim());if(p.length===2&&p[0]&&p[1])n=p[1]+" "+p[0];}
+      const parts=n.split(/\s+/);
+      return parts.length>1?parts[0]+" "+parts[parts.length-1][0]+".":parts[0];
+    }
+
     // ── Task cards ────────────────────────────────────────────
     function tCard(t){
       const c=priColor(t.days),dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"Due today":t.days+"d left";
@@ -418,9 +428,7 @@
       const titleRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"6px",marginBottom:"5px"});
       titleRow.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",minWidth:"0",overflow:"hidden",textOverflow:"ellipsis"},{textContent:t.title}));
       if(t.sender){
-        const parts=t.sender.trim().split(/\s+/);
-        const senderName=parts.length>1?parts[0]+" "+parts[parts.length-1][0]+".":parts[0];
-        titleRow.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"500"},{textContent:senderName}));
+        titleRow.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"500"},{textContent:fmtSender(t.sender)}));
       }
       card.appendChild(titleRow);
       const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});
