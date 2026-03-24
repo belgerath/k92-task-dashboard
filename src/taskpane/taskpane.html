@@ -428,7 +428,7 @@
       const titleRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"6px",marginBottom:"5px"});
       titleRow.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",minWidth:"0",overflow:"hidden",textOverflow:"ellipsis"},{textContent:t.title}));
       if(t.sender){
-        titleRow.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"500"},{textContent:fmtSender(t.sender)}));
+        titleRow.appendChild(el("span",{fontSize:"9px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(t.sender)}));
       }
       card.appendChild(titleRow);
       const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});
