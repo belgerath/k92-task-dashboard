@@ -153,18 +153,29 @@
     }
     // Arrow-key navigation for button groups
     function addArrowNav(container,className){
+      // When container receives focus, delegate to first button (or selected one)
+      container.addEventListener("focus",()=>{
+        const btns=Array.from(container.querySelectorAll("button"));
+        // Find already-selected button (has bold border) or default to first
+        const selected=btns.find(b=>b.style.fontWeight==="700")||btns[0];
+        if(selected)selected.focus();
+      });
       container.addEventListener("keydown",e=>{
         const btns=Array.from(container.querySelectorAll("button"));
         const idx=btns.indexOf(document.activeElement);
         if(idx<0)return;
         if(e.key==="ArrowRight"||e.key==="ArrowDown"){e.preventDefault();const next=btns[(idx+1)%btns.length];next.focus();next.click();}
         else if(e.key==="ArrowLeft"||e.key==="ArrowUp"){e.preventDefault();const prev=btns[(idx-1+btns.length)%btns.length];prev.focus();prev.click();}
-        else if(e.key==="Enter"){
-          // Confirm selection — stay on current group
+        else if(e.key==="Enter"||e.key===" "){
+          // Confirm selection and advance to next group
           e.preventDefault();
+          btns[idx].click();
+          const allGroups=Array.from(document.querySelectorAll(".kb-group"));
+          const gi=allGroups.indexOf(container);
+          if(gi>=0&&gi<allGroups.length-1){const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
         }
         else if(e.key==="Tab"&&!e.shiftKey){
-          // Tab advances to next field group
+          // Tab also advances to next field group
           e.preventDefault();
           const allGroups=Array.from(document.querySelectorAll(".kb-group"));
           const gi=allGroups.indexOf(container);
@@ -172,8 +183,7 @@
         }
       });
       container.classList.add("kb-group");
-      // Make first button focusable
-      container.setAttribute("tabindex","-1");
+      container.setAttribute("tabindex","0");
     }
     function mkEffortRow(cur,onSelect) {
       const r=el("div",{display:"flex",gap:"4px"});
