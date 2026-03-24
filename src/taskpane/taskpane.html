@@ -837,6 +837,24 @@
     document.getElementById("tabDash").addEventListener("click",()=>{switchTab("Dash");loadFlaggedEmails(renderDash);});
     document.getElementById("tabMatrix").addEventListener("click",()=>{switchTab("Matrix");renderMatrix();});
 
+    // ── Keyboard shortcuts ────────────────────────────────────
+    const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated"};
+    document.addEventListener("keydown",e=>{
+      // Skip if user is typing in an input/textarea
+      const tag=document.activeElement&&document.activeElement.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
+      const typeKey=typeKeys[e.key];
+      if(typeKey){
+        // Only act on Email tab in new/edit mode
+        const emailTab=document.getElementById("pEmail");
+        if(!emailTab||!emailTab.classList.contains("active"))return;
+        if(mode!=="new"&&mode!=="edit")return;
+        // Find the type grid button and click it
+        const btn=emailTab.querySelector('button[data-type="'+typeKey+'"]');
+        if(btn){btn.click();e.preventDefault();}
+      }
+    });
+
     // ── Office init ───────────────────────────────────────────
     Office.onReady((info)=>{
       if(info.host===Office.HostType.Outlook){
