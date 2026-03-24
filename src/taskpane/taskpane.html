@@ -159,12 +159,16 @@
         if(idx<0)return;
         if(e.key==="ArrowRight"||e.key==="ArrowDown"){e.preventDefault();const next=btns[(idx+1)%btns.length];next.focus();next.click();}
         else if(e.key==="ArrowLeft"||e.key==="ArrowUp"){e.preventDefault();const prev=btns[(idx-1+btns.length)%btns.length];prev.focus();prev.click();}
-        else if(e.key==="Enter"||e.key==="Tab"){
-          if(e.key==="Enter")e.preventDefault();
-          // Move focus to next field group
+        else if(e.key==="Enter"){
+          // Confirm selection — stay on current group
+          e.preventDefault();
+        }
+        else if(e.key==="Tab"&&!e.shiftKey){
+          // Tab advances to next field group
+          e.preventDefault();
           const allGroups=Array.from(document.querySelectorAll(".kb-group"));
           const gi=allGroups.indexOf(container);
-          if(gi>=0&&gi<allGroups.length-1){e.preventDefault();const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
+          if(gi>=0&&gi<allGroups.length-1){const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
         }
       });
       container.classList.add("kb-group");
