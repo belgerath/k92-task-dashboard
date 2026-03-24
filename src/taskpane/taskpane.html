@@ -345,8 +345,11 @@
       next();
     }
     // One-time forced re-fetch of all senders to fix incorrect data
-    if(!localStorage.getItem("k92senderFixV2")){
-      setTimeout(()=>{backfillSenders(true);localStorage.setItem("k92senderFixV2","1");},3000);
+    // One-time fix: clear wrong senders and force a scan to repopulate from Graph data
+    if(!localStorage.getItem("k92senderFixV3")){
+      tasks.forEach(t=>{delete t.sender;});saveTasks();
+      localStorage.setItem("k92senderFixV3","1");
+      setTimeout(()=>{lastScanTime=0;loadFlaggedEmails(renderDash);},3000);
     }
 
     function loadFlaggedEmails(cb){
@@ -374,11 +377,11 @@
             (t.title && m.subject && t.title===m.subject)
           );
           if(existing){
-            // Backfill conversationId and sender if missing
+            // Backfill conversationId, always update sender from scan data
             let changed=false;
             if(!existing.conversationId && m.conversationId){existing.conversationId=m.conversationId;changed=true;}
             const fromN=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
-            if(!existing.sender && fromN){existing.sender=fromN;changed=true;}
+            if(fromN&&existing.sender!==fromN){existing.sender=fromN;changed=true;}
             if(changed)saveTasks();
             return;
           }
