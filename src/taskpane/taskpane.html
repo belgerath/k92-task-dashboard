@@ -972,7 +972,9 @@
         removeOutlookColour();
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...");
-          window.k92Graph.archiveMessage(currentEmailId).then(()=>{
+          window.k92Graph.setCategories(currentEmailId,["To be Archived"]).then(()=>{
+            return window.k92Graph.archiveMessage(currentEmailId);
+          }).then(()=>{
             setStatus("Archived.",3000);
           }).catch(e=>{
             console.error("Archive failed:",e);
@@ -985,6 +987,11 @@
       });es.appendChild(cmpBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
       canBtn.addEventListener("click",()=>{
+        // Remove categories via Graph API (works for any email, not just selected)
+        if(currentEmailId && window.k92Graph){
+          window.k92Graph.setCategories(currentEmailId,[]).catch(e=>console.error("Graph clear categories failed:",e));
+        }
+        // Also try Office.js for the currently selected email
         clearOutlookColour();
         if(currentTaskId!==null)removeTask(currentTaskId);
         currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};mode="new";renderEmail();renderDash();
