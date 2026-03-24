@@ -345,8 +345,8 @@
       next();
     }
     // One-time forced re-fetch of all senders to fix incorrect data
-    if(!localStorage.getItem("k92senderFixV1")){
-      setTimeout(()=>{backfillSenders(true);localStorage.setItem("k92senderFixV1","1");},3000);
+    if(!localStorage.getItem("k92senderFixV2")){
+      setTimeout(()=>{backfillSenders(true);localStorage.setItem("k92senderFixV2","1");},3000);
     }
 
     function loadFlaggedEmails(cb){

@@ -85,11 +85,20 @@ async function graphScanCategorizedEmails() {
   return result && result.value ? result.value : [];
 }
 
-// Fetch sender name for a single message by its EWS id
+// Fetch sender name for a message — handles both REST and EWS id formats
 async function graphGetSender(messageId) {
-  const graphId = await toGraphId(messageId);
-  const result = await graphFetch("/me/messages/" + graphId + "?$select=from");
-  if (result && result.from && result.from.emailAddress) return result.from.emailAddress.name || "";
+  // Try direct (REST ID) first
+  try {
+    const result = await graphFetch("/me/messages/" + messageId + "?$select=from");
+    if (result && result.from && result.from.emailAddress) return result.from.emailAddress.name || "";
+  } catch (e) {
+    // If direct fails, try converting from EWS ID
+    try {
+      const graphId = await toGraphId(messageId);
+      const result = await graphFetch("/me/messages/" + graphId + "?$select=from");
+      if (result && result.from && result.from.emailAddress) return result.from.emailAddress.name || "";
+    } catch (e2) {}
+  }
   return "";
 }
 
