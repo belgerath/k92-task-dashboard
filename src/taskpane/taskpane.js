@@ -85,10 +85,19 @@ async function graphScanCategorizedEmails() {
   return result && result.value ? result.value : [];
 }
 
+// Fetch sender name for a single message by its EWS id
+async function graphGetSender(messageId) {
+  const graphId = await toGraphId(messageId);
+  const result = await graphFetch("/me/messages/" + graphId + "?$select=from");
+  if (result && result.from && result.from.emailAddress) return result.from.emailAddress.name || "";
+  return "";
+}
+
 // Expose all Graph functions on window for use by inline script in taskpane.html
 window.k92Graph = {
   init: initMsal,
   setCategories: graphSetCategories,
   archiveMessage: graphArchiveMessage,
   scanCategorizedEmails: graphScanCategorizedEmails,
+  getSender: graphGetSender,
 };
