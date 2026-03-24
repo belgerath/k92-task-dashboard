@@ -330,7 +330,11 @@
         // Auto-create tasks for categorized emails not already tracked
         const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
         deduped.forEach(m=>{
-          const existing=tasks.find(t=>t.conversationId && m.conversationId && t.conversationId===m.conversationId);
+          const existing=tasks.find(t=>
+            (t.conversationId && m.conversationId && t.conversationId===m.conversationId) ||
+            (t.emailId && t.emailId===m.id) ||
+            (t.title && m.subject && t.title===m.subject)
+          );
           if(existing)return;
           const found=(m.categories||[]).find(c=>catMap[c]);
           if(!found)return;
