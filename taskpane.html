@@ -1,1 +1,1253 @@
-<!doctype html><html><head><meta charset="UTF-8"/><meta http-equiv="X-UA-Compatible" content="IE=Edge"/><meta name="viewport" content="width=device-width,initial-scale=1"><title>Tasks</title><script src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:'Segoe UI',Arial,sans-serif;font-size:12px;background:#f4f5f7;color:#1a1a1a}.tabs{display:flex;background:linear-gradient(135deg,#0062b8 0,#0078d4 50%,#1a8ae6 100%);padding:6px 6px 0;gap:3px}.tab{flex:1;padding:9px 6px;font-size:11px;font-weight:600;border:none;cursor:pointer;background:0 0;color:rgba(255,255,255,.65);border-radius:8px 8px 0 0;font-family:'Segoe UI',Arial,sans-serif;transition:all .2s ease;letter-spacing:.3px;position:relative}.tab:hover{color:#fff;background:rgba(255,255,255,.12)}.tab.on{color:#0078d4;background:#f4f5f7;font-weight:700;box-shadow:0 -2px 8px rgba(0,0,0,.06)}.tc{padding:12px;overflow-y:auto;flex:1;display:none}.tc.active{display:block}input[type=date],input[type=text],textarea{width:100%;padding:7px 10px;font-size:12px;border-radius:6px;border:1px solid #d0d5dd;font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;transition:border-color .15s,box-shadow .15s}input[type=date]:focus,input[type=text]:focus,textarea:focus{outline:0;border-color:#0078d4;box-shadow:0 0 0 2px rgba(0,120,212,.15)}textarea{resize:none}.snip{font-size:12px;color:#333;margin-bottom:12px;padding:8px 10px;background:#fff;border-radius:8px;border-left:3px solid #0078d4;font-family:'Segoe UI',Arial,sans-serif;box-shadow:0 1px 3px rgba(0,0,0,.06);font-weight:600}.ntb{width:100%;padding:10px;border-radius:8px;border:1.5px dashed #0078d4;background:rgba(0,120,212,.04);color:#0078d4;font-weight:600;font-size:12px;cursor:pointer;font-family:'Segoe UI',Arial,sans-serif;margin-bottom:12px;display:block;transition:all .15s}.ntb:hover{background:rgba(0,120,212,.1);border-style:solid}.sidebar-content{height:calc(100vh - 46px);overflow-y:auto}#eStatus{font-size:10px;color:#666;font-style:italic;margin-bottom:4px;min-height:14px;font-family:'Segoe UI',Arial,sans-serif}#dbgLog{font-size:9px;color:#333;font-family:monospace;background:#f0f0f0;border:1px solid #ccc;border-radius:5px;padding:5px;margin-bottom:6px;max-height:120px;overflow-y:auto;display:none;white-space:pre-wrap;word-break:break-all}button{transition:all .12s ease}button:active{transform:scale(.97)}</style><script defer="defer" src="polyfill.js"></script><script defer="defer" src="taskpane.js"></script></head><body><div class="tabs"><button class="tab on" id="tabEmail">Email</button> <button class="tab" id="tabDash">Dashboard</button> <button class="tab" id="tabTiles">Tiles</button></div><div class="sidebar-content"><div class="tc active" id="pEmail"><div id="eSnip" class="snip">Select an email to begin</div><div id="eStatus"></div><div id="dbgLog"></div><div id="eState"></div></div><div class="tc" id="pDash"><button class="ntb" id="newTaskBtn">+ New manual task</button><div id="mForm" style="display:none"></div><div id="dContent"></div></div><div class="tc" id="pTiles"><div id="tilesContent"></div></div></div><script>const TC={task:"#0078D4",discuss:"#BA7517",waiting:"#7C3AED",delegated:"#4B5563"},TL={task:"Task",discuss:"Discuss",waiting:"Waiting",delegated:"Delegate"},EC="#185FA5";function dbg(e){const t=document.getElementById("dbgLog");if(!t)return;t.style.display="block";const n=t.querySelector(".dbg-text");n&&(n.textContent+=(new Date).toLocaleTimeString()+" "+e+"\n",n.scrollTop=n.scrollHeight)}function dbgClear(){const e=document.getElementById("dbgLog");if(!e)return;const t=e.querySelector(".dbg-text");t&&(t.textContent=""),e.style.display="none"}function buildDbgPanel(){const e=document.getElementById("dbgLog");if(!e||e.children.length>0)return;const t=document.createElement("div");t.style.cssText="display:flex;justify-content:space-between;margin-bottom:3px;";const n=document.createElement("span");n.style.cssText="font-size:9px;font-weight:700;color:#666;",n.textContent="DEBUG LOG";const o=document.createElement("button");o.textContent="📋 Copy",o.style.cssText="font-size:9px;padding:1px 5px;border-radius:3px;border:1px solid #ccc;background:#fff;cursor:pointer;",o.addEventListener("click",()=>{const t=e.querySelector(".dbg-text").textContent;navigator.clipboard.writeText(t).then(()=>{o.textContent="✓ Copied!",setTimeout(()=>o.textContent="📋 Copy",2e3)})}),t.appendChild(n),t.appendChild(o),e.appendChild(t);const a=document.createElement("pre");a.className="dbg-text",a.style.cssText="font-size:9px;max-height:100px;overflow-y:auto;margin:0;white-space:pre-wrap;word-break:break-all;",e.appendChild(a)}function setStatus(e,t){const n=document.getElementById("eStatus");n&&(n.textContent=e,t&&setTimeout(()=>{n.textContent===e&&(n.textContent="")},t))}function loadPending(){try{return JSON.parse(localStorage.getItem("k92pending")||"[]")}catch(e){return[]}}function savePending(e){try{localStorage.setItem("k92pending",JSON.stringify(e))}catch(e){}}function addPending(e){if(!e)return;const t=loadPending();t.includes(e)||(t.push(e),savePending(t))}function removePending(e){savePending(loadPending().filter(t=>t!==e))}function isPending(e){return loadPending().includes(e)}function localToday(){const e=new Date;return new Date(e.getFullYear(),e.getMonth(),e.getDate())}function daysFromDate(e){if(!e)return 7;const t=e.split("-").map(Number);return Math.round((new Date(t[0],t[1]-1,t[2])-localToday())/864e5)}function fmtD(e){if(!e)return"—";const t=e.split("-");return 3!==t.length?e:parseInt(t[2])+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(t[1])-1]+" "+t[0]}function dateStr(e){return e.getFullYear()+"-"+String(e.getMonth()+1).padStart(2,"0")+"-"+String(e.getDate()).padStart(2,"0")}const pri=e=>e<=2?{l:"High",c:"#DC2626",lbl:"red"}:e<=7?{l:"Medium",c:"#EA580C",lbl:"orange"}:{l:"Low",c:"#16A34A",lbl:"green"};function hexToRgb(e){return parseInt(e.slice(1,3),16)+","+parseInt(e.slice(3,5),16)+","+parseInt(e.slice(5,7),16)}function el(e,t,n){const o=document.createElement(e);return t&&Object.assign(o.style,t),n&&Object.assign(o,n),o}function mkLbl(e){return el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",marginTop:"10px",display:"block"},{textContent:e})}function mkInput(e,t,n){const o=document.createElement("input");return Object.assign(o.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",display:"block"}),o.type=e,t&&(o.id=t),n&&(o.placeholder=n),"date"===e&&(o.addEventListener("focus",()=>{try{o.showPicker()}catch(e){}}),o.addEventListener("keydown",e=>{"Enter"===e.key&&(e.preventDefault(),o.dispatchEvent(new Event("change",{bubbles:!0})))}),o.addEventListener("change",()=>{setTimeout(()=>{const e=Array.from(document.querySelectorAll(".kb-group")),t=o.closest(".kb-group"),n=e.indexOf(t);if(n>=0&&n<e.length-1){const t=e[n+1].querySelector("button,input,textarea");t&&t.focus()}},50)})),o}function mkTextarea(e,t,n){const o=document.createElement("textarea");return Object.assign(o.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",resize:"none",display:"block"}),o.rows=n||2,e&&(o.id=e),t&&(o.placeholder=t),o}function mkPill(e,t,n,o){return el("div",{background:t,color:n,border:"1px solid "+o,borderRadius:"8px",padding:"7px 10px",fontSize:"11px",marginTop:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:e})}function mkBtn(e,t,n,o){return el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:o||"none",background:t,color:n,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",display:"block",boxShadow:"0 1px 2px rgba(0,0,0,0.06)"},{textContent:e})}function sType(e,t){const n=TC[e.dataset.type]||"#0078D4";Object.assign(e.style,{height:"34px",width:"100%",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"8px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 6px",border:t?"2px solid "+n:"1.5px solid #d0d5dd",background:t?n:"#fff",color:t?"#fff":"#555",fontWeight:t?"700":"500",boxShadow:t?"0 2px 4px rgba(0,0,0,0.1)":"0 1px 2px rgba(0,0,0,0.04)"})}function sEff(e,t){Object.assign(e.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 4px",border:t?"2px solid "+EC:"1.5px solid #d0d5dd",background:t?EC:"#fff",color:t?"#fff":"#555",fontWeight:t?"700":"500",boxShadow:t?"0 2px 4px rgba(0,0,0,0.1)":"none"})}function sImp(e,t){const n=parseInt(e.dataset.imp),o=n>=4?"#DC2626":3===n?"#EA580C":"#16A34A";Object.assign(e.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",padding:"0 2px",border:t?"2px solid "+o:"1.5px solid #d0d5dd",background:t?o:"#fff",color:t?"#fff":"#555",fontWeight:t?"700":"500",boxShadow:t?"0 2px 4px rgba(0,0,0,0.1)":"none"})}function mkTypeGrid(e,t){const n=el("div",{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px"});return Object.keys(TL).forEach(o=>{const a=el("button",{},{textContent:TL[o]});a.dataset.type=o,sType(a,o===e),a.addEventListener("click",()=>{n.querySelectorAll("button").forEach(e=>sType(e,e.dataset.type===o)),t&&t(o)}),n.appendChild(a)}),n}function addArrowNav(e,t){e.addEventListener("focus",()=>{const t=Array.from(e.querySelectorAll("button")),n=t.find(e=>"700"===e.style.fontWeight)||t[0];n&&n.focus()}),e.addEventListener("keydown",t=>{const n=Array.from(e.querySelectorAll("button")),o=n.indexOf(document.activeElement);if(!(o<0))if("ArrowRight"===t.key||"ArrowDown"===t.key){t.preventDefault();const e=n[(o+1)%n.length];e.focus(),e.click()}else if("ArrowLeft"===t.key||"ArrowUp"===t.key){t.preventDefault();const e=n[(o-1+n.length)%n.length];e.focus(),e.click()}else if("Enter"===t.key||" "===t.key){t.preventDefault(),n[o].click();const a=Array.from(document.querySelectorAll(".kb-group")),i=a.indexOf(e);if(i>=0&&i<a.length-1){const e=a[i+1].querySelector("button,input,textarea");e&&e.focus()}}else if("Tab"===t.key&&!t.shiftKey){t.preventDefault();const n=Array.from(document.querySelectorAll(".kb-group")),o=n.indexOf(e);if(o>=0&&o<n.length-1){const e=n[o+1].querySelector("button,input,textarea");e&&e.focus()}}}),e.classList.add("kb-group"),e.setAttribute("tabindex","0")}function mkEffortRow(e,t){const n=el("div",{display:"flex",gap:"4px"});return["Quick","Medium","Deep"].forEach(o=>{const a=el("button",{},{textContent:o});a.dataset.e=o,sEff(a,!!e&&o===e),a.addEventListener("click",()=>{n.querySelectorAll("button").forEach(e=>sEff(e,e.dataset.e===o)),t&&t(o)}),n.appendChild(a)}),addArrowNav(n),n}function mkImportanceRow(e,t){const n=el("div",{}),o=el("div",{display:"flex",gap:"3px"});for(let n=1;n<=5;n++){const a=el("button",{},{textContent:n});a.dataset.imp=String(n),sImp(a,null!==e&&e===n),a.addEventListener("click",()=>{o.querySelectorAll("button").forEach(e=>sImp(e,parseInt(e.dataset.imp)===n)),t&&t(n)}),o.appendChild(a)}addArrowNav(o);const a=el("div",{fontSize:"9px",color:"#aaa",fontFamily:"Arial,sans-serif",marginTop:"2px",display:"flex",justifyContent:"space-between"});return a.appendChild(el("span",{},{textContent:"Low"})),a.appendChild(el("span",{},{textContent:"High"})),n.appendChild(o),n.appendChild(a),n}function mkTaskColourPill(){return el("div",{borderRadius:"7px",padding:"6px 9px",fontSize:"11px",marginTop:"8px",lineHeight:"1.4",fontFamily:"Arial,sans-serif",border:"1px solid #ddd",background:"#f5f5f5",color:"#555"},{textContent:"Pick a due date to see Outlook tag colour"})}function updateTaskColourPill(e,t){if(!t)return Object.assign(e.style,{background:"#f5f5f5",color:"#555",border:"1px solid #ddd"}),void(e.textContent="Pick a due date to see Outlook tag colour");const n=daysFromDate(t),o=pri(n),a={"#DC2626":["#FEE2E2","#991b1b","#FCA5A5"],"#EA580C":["#FFEDD5","#9a3412","#FED7AA"],"#16A34A":["#DCFCE7","#166534","#86EFAC"]},i=a[o.c]||a["#16A34A"];Object.assign(e.style,{background:i[0],color:i[1],border:"1px solid "+i[2]}),e.textContent="Will be tagged "+o.lbl+" in Outlook ("+n+" day"+(1===n?"":"s")+" away — "+o.l+" priority)"}function wrapKbGroup(e){const t=el("div",{});return t.classList.add("kb-group"),t.appendChild(e),t}function buildFields(e,t,n){if(n.innerHTML="","waiting"===e){n.appendChild(mkLbl("EXPECTED BY"));const e=mkInput("date","fDate");e.value=t.dueDate||dateStr(localToday()),t.dueDate||(t.dueDate=e.value),e.addEventListener("change",e=>t.dueDate=e.target.value),n.appendChild(wrapKbGroup(e)),n.appendChild(mkLbl("IMPORTANCE (1–5)")),n.appendChild(mkImportanceRow(t.importance||null,e=>{t.importance=e})),n.appendChild(mkLbl("WAITING ON"));const o=mkInput("text","fWho","Person / organisation");o.value=t.waitingWho||"",o.addEventListener("input",e=>t.waitingWho=e.target.value),n.appendChild(wrapKbGroup(o)),n.appendChild(mkLbl("WHAT ARE YOU WAITING FOR?"));const a=mkTextarea("fNotes","Describe what you need...");a.value=t.notes||"",a.addEventListener("input",e=>t.notes=e.target.value),n.appendChild(wrapKbGroup(a)),n.appendChild(mkPill("Will be tagged purple in Outlook","#EEEDFE","#3C3489","#AFA9EC"))}else if("delegated"===e){n.appendChild(mkLbl("DUE DATE"));const e=mkInput("date","fDate");e.value=t.dueDate||dateStr(localToday()),t.dueDate||(t.dueDate=e.value),e.addEventListener("change",e=>t.dueDate=e.target.value),n.appendChild(wrapKbGroup(e)),n.appendChild(mkLbl("IMPORTANCE (1–5)")),n.appendChild(mkImportanceRow(t.importance||null,e=>{t.importance=e})),n.appendChild(mkLbl("DELEGATE TO"));const o=mkInput("text","fWho","Team member name");o.value=t.delegateTo||"",o.addEventListener("input",e=>t.delegateTo=e.target.value),n.appendChild(wrapKbGroup(o)),n.appendChild(mkLbl("NOTES"));const a=mkTextarea("fNotes","Optional context...");a.value=t.notes||"",a.addEventListener("input",e=>t.notes=e.target.value),n.appendChild(wrapKbGroup(a)),n.appendChild(mkPill("Will be tagged gray in Outlook","#f0f0f0","#555","#ddd"))}else if("discuss"===e){n.appendChild(mkLbl("DUE DATE"));const e=mkInput("date","fDate");e.value=t.dueDate||dateStr(localToday()),t.dueDate||(t.dueDate=e.value),e.addEventListener("change",e=>t.dueDate=e.target.value),n.appendChild(wrapKbGroup(e)),n.appendChild(mkLbl("IMPORTANCE (1–5)")),n.appendChild(mkImportanceRow(t.importance||null,e=>{t.importance=e})),n.appendChild(mkLbl("NOTES"));const o=mkTextarea("fNotes","What do you need to discuss?");o.value=t.notes||"",o.addEventListener("input",e=>t.notes=e.target.value),n.appendChild(wrapKbGroup(o)),n.appendChild(mkPill("Will appear in Discuss section","#FAEEDA","#633806","#FAC775"))}else if("task"===e){n.appendChild(mkLbl("DUE DATE"));const e=mkInput("date","fDate");e.value=t.dueDate||dateStr(localToday()),t.dueDate||(t.dueDate=e.value);const o=mkTaskColourPill();e.addEventListener("change",e=>{t.dueDate=e.target.value,updateTaskColourPill(o,t.dueDate)}),n.appendChild(wrapKbGroup(e)),n.appendChild(mkLbl("IMPORTANCE (1–5)")),n.appendChild(mkImportanceRow(t.importance||null,e=>{t.importance=e})),n.appendChild(mkLbl("EFFORT"));const a=mkEffortRow(t.effort||"",e=>t.effort=e);n.appendChild(a),n.appendChild(mkLbl("NOTES"));const i=mkTextarea("fNotes","Optional context...");i.value=t.notes||"",i.addEventListener("input",e=>t.notes=e.target.value),n.appendChild(wrapKbGroup(i)),n.appendChild(o),t.dueDate&&updateTaskColourPill(o,t.dueDate)}}function loadTasks(){try{return JSON.parse(localStorage.getItem("k92tasks")||"[]")}catch(e){return[]}}function saveTasks(){try{localStorage.setItem("k92tasks",JSON.stringify(tasks))}catch(e){}}function deduplicateTasks(e){const t=new Set;return e.filter(e=>{const n=(e.title||"")+"|||"+(e.type||"");return!t.has(n)&&(t.add(n),!0)})}const tasks=deduplicateTasks(loadTasks());saveTasks();let nid=tasks.length>0?Math.max(1,...tasks.map(e=>"number"==typeof e.id?e.id:0))+1:1;function removeTask(e){const t=tasks.findIndex(t=>t.id===e);t>-1&&(tasks.splice(t,1),saveTasks())}function loadCompletions(){try{return JSON.parse(localStorage.getItem("k92completions")||"[]")}catch(e){return[]}}function saveCompletions(e){try{localStorage.setItem("k92completions",JSON.stringify(e))}catch(e){}}function logCompletion(e){const t=loadCompletions();t.push({title:e.title,type:e.type,date:dateStr(localToday()),dueDate:e.dueDate||"",effort:e.effort||""});const n=new Date(localToday().getTime()-2592e6);saveCompletions(t.filter(e=>{const t=e.date.split("-").map(Number);return new Date(t[0],t[1]-1,t[2])>=n}))}function loadCustomRecurring(){try{return JSON.parse(localStorage.getItem("k92recurring")||"[]")}catch(e){return[]}}function saveCustomRecurring(e){try{localStorage.setItem("k92recurring",JSON.stringify(e))}catch(e){}}function getRecurringTasks(){const e=localToday(),t=e.getFullYear(),n=e.getMonth(),o=[];function a(t,n,a){const i=Math.round((n-e)/864e5);i>=0&&i<=7&&o.push({id:"rec_"+t.replace(/\s/g,"_")+"_"+dateStr(n),title:t,days:i,type:"task",effort:a||"Medium",importance:3,dueDate:dateStr(n),recurring:!0})}const i=new Date(t,n+1,0);a("Monthly Cost Report",new Date(t,n,8),"Deep"),a("Monthly Cash Flow Model",new Date(t,n,9),"Deep"),[[2,31],[5,30],[8,30]].forEach(([e,n])=>a("Quarterly Instalment Calculation",new Date(t,e,n),"Medium")),[[3,30],[6,31],[9,31]].forEach(([e,n])=>a("Quarterly Instalment Payment",new Date(t,e,n),"Quick"));loadCustomRecurring().forEach(o=>{if("monthly"===o.freq)(o.days||[]).forEach(e=>{const d=Math.min(e,i.getDate());a(o.title,new Date(t,n,d),o.effort||"Medium")});else if("quarterly"===o.freq){[0,3,6,9].forEach(e=>{const n=new Date(t,e+1,0),i=Math.min(o.dayOfMonth||1,n.getDate());a(o.title,new Date(t,e,i),o.effort||"Medium")})}else if("weekly"===o.freq)for(let t=0;t<7;t++){const n=new Date(e.getTime()+864e5*t);n.getDay()===(o.dayOfWeek||1)&&a(o.title,n,o.effort||"Medium")}});const d=loadCompletions();return o.filter(e=>!d.some(t=>t.title===e.title&&(t.date===e.dueDate||t.dueDate===e.dueDate)))}const priColor=e=>e<=2?"#DC2626":e<=7?"#D97706":"#16A34A",priLabel=e=>e<=2?"High":e<=7?"Medium":"Low";let expSec="high",flaggedEmails=[],flagsLoading=!1,lastScanTime=0;const SCAN_COOLDOWN=6e4;function backfillSenders(e){if(!window.k92Graph||!window.k92Graph.getSender)return;const t=e?tasks.filter(e=>e.emailId):tasks.filter(e=>e.emailId&&!e.sender);if(!t.length)return;let n=0;!function e(){if(n>=t.length)return;const o=t[n++];window.k92Graph.getSender(o.emailId).then(t=>{t&&(o.sender=t,saveTasks(),renderDash()),e()}).catch(()=>e())}()}function loadFlaggedEmails(e){const t=Date.now();t-lastScanTime<6e4?e&&e():(lastScanTime=t,window.k92Graph?(flagsLoading=!0,renderDash(),window.k92Graph.scanCategorizedEmails().then(t=>{flagsLoading=!1;const n=new Set,o=[];t.forEach(e=>{const t=e.conversationId||e.id;n.has(t)||(n.add(t),o.push(e))});const a={High:"task",Med:"task",Low:"task",Discuss:"discuss",Waiting:"waiting",Delegate:"delegated"};o.forEach(e=>{const t=tasks.find(t=>t.conversationId&&e.conversationId&&t.conversationId===e.conversationId||t.emailId&&t.emailId===e.id||t.title&&e.subject&&t.title===e.subject);if(t){let n=!1;!t.conversationId&&e.conversationId&&(t.conversationId=e.conversationId,n=!0);const o=e.from&&e.from.emailAddress&&e.from.emailAddress.name||"";return o&&t.sender!==o&&(t.sender=o,n=!0),void(n&&saveTasks())}const n=(e.categories||[]).find(e=>a[e]);if(!n)return;const o=a[n],i="High"===n?2:"Med"===n?7:14,d=new Date(localToday().getTime()+864e5*i),r=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"),l=e.from&&e.from.emailAddress&&e.from.emailAddress.name||"";tasks.push({title:e.subject||"No subject",days:i,dueDate:r,type:o,effort:"",importance:"High"===n?1:"Med"===n?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:e.id,conversationId:e.conversationId||null,sender:l})}),saveTasks(),flaggedEmails=[],e?e():renderDash(),backfillSenders()}).catch(t=>{flagsLoading=!1,console.error("Graph scan failed:",t),flaggedEmails=[],e?e():renderDash()})):e&&e())}function fmtSender(e){if(!e)return"";let t=e.trim();if(t.indexOf(",")>0){const e=t.split(",").map(e=>e.trim());2===e.length&&e[0]&&e[1]&&(t=e[1]+" "+e[0])}const n=t.split(/\s+/);return n.length>1?n[0]+" "+n[n.length-1][0]+".":n[0]}function tCard(e){const t=priColor(e.days),n=e.days<0?Math.abs(e.days)+"d overdue":0===e.days?"Due today":e.days+"d left",o=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid "+t,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"relative"});let a=null;o.addEventListener("mouseenter",()=>{o.style.background="#fafbfc",o.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)",e.notes&&(a=el("div",{position:"absolute",left:"0",right:"0",bottom:"100%",marginBottom:"4px",background:"#333",color:"#fff",padding:"6px 9px",borderRadius:"6px",fontSize:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif",zIndex:"100",boxShadow:"0 4px 12px rgba(0,0,0,0.2)",pointerEvents:"none",maxHeight:"80px",overflow:"hidden",wordBreak:"break-word"},{textContent:e.notes}),o.appendChild(a))}),o.addEventListener("mouseleave",()=>{o.style.background="#fff",o.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)",a&&(a.remove(),a=null)});const i=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"6px",marginBottom:"5px"});i.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",minWidth:"0",overflow:"hidden",textOverflow:"ellipsis"},{textContent:e.title})),e.sender&&i.appendChild(el("span",{fontSize:"9px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(e.sender)})),o.appendChild(i);const d=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});d.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:t,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:n})),e.importance&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+e.importance})),e.effort&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:e.effort})),e.recurring&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EFF6FF",color:"#1e40af",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"recurring"})),e.notes&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#FFFBEB",color:"#92400E",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"📝"})),"delegated"===e.type&&e.who&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"→ "+e.who})),"waiting"===e.type&&e.who&&d.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EEEDFE",color:"#3C3489",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"waiting: "+e.who})),o.appendChild(d);const r=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center"});if(e.recurring)r.appendChild(el("div",{}));else{const t=el("div",{display:"flex",gap:"3px",alignItems:"center"});t.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Snooze:"})),[1,3].forEach(n=>{const o=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"+"+n+"d"});o.addEventListener("mouseenter",()=>{o.style.background="#e5e7eb"}),o.addEventListener("mouseleave",()=>{o.style.background="#f9fafb"}),o.addEventListener("click",t=>{t.stopPropagation();const o=tasks.find(t=>t.id===e.id);if(o){const e=o.dueDate?o.dueDate.split("-").map(Number):null,t=e?new Date(e[0],e[1]-1,e[2]):localToday(),a=new Date(t.getTime()+864e5*n);o.dueDate=dateStr(a),o.days=daysFromDate(o.dueDate),saveTasks(),renderDash()}}),t.appendChild(o)}),r.appendChild(t)}const l=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✎ Edit"});l.addEventListener("click",()=>{currentTaskId=e.id,currentEmailSubject=e.title,currentEmailId=e.emailId||null,saved={type:e.type,effort:e.effort||"",importance:e.importance||null,dueDate:e.dueDate||"",delegateTo:e.delegateTo||"",waitingWho:e.waitingWho||"",notes:e.notes||""},form={...saved},mode="edit",switchTab("Email"),renderEmail()});const s=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✓ Complete"});s.addEventListener("click",()=>{e.emailId&&window.k92Graph?window.k92Graph.setCategories(e.emailId,["To be Archived"]).then(()=>window.k92Graph.archiveMessage(e.emailId)).catch(t=>{console.error("Graph complete failed:",t),Office.context.mailbox.item&&(e.emailId===currentEmailId||e.conversationId&&Office.context.mailbox.item.conversationId&&e.conversationId===Office.context.mailbox.item.conversationId)?removeOutlookColour():addPending(e.emailId)}):Office.context.mailbox.item&&(e.emailId===currentEmailId||e.conversationId&&Office.context.mailbox.item.conversationId&&e.conversationId===Office.context.mailbox.item.conversationId)?removeOutlookColour():e.emailId&&addPending(e.emailId),logCompletion(e),e.recurring||removeTask(e.id),e.id===currentTaskId&&(currentTaskId=null,mode="new",form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={},renderEmail()),renderDash()});const p=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #F7C1C1",background:"#FCEBEB",color:"#791F1F",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✕"});p.addEventListener("click",()=>{e.emailId&&window.k92Graph&&window.k92Graph.setCategories(e.emailId,[]).catch(e=>console.error("Graph clear failed:",e)),Office.context.mailbox.item&&(e.emailId===currentEmailId||e.conversationId&&Office.context.mailbox.item.conversationId&&e.conversationId===Office.context.mailbox.item.conversationId)&&clearOutlookColour(),e.recurring||removeTask(e.id),e.id===currentTaskId&&(currentTaskId=null,mode="new",form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={},renderEmail()),renderDash()});const c=el("div",{display:"flex",gap:"4px"});return e.recurring||(c.appendChild(l),c.appendChild(p)),c.appendChild(s),r.appendChild(c),o.appendChild(r),o}function secH(e,t,n,o,a){const i=document.createElement("div"),d=expSec===e,r=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:"10px",cursor:"pointer",border:"1px solid #e5e7eb",background:"#fff",marginBottom:"4px",boxShadow:"0 1px 2px rgba(0,0,0,0.03)"}),l=el("div",{display:"flex",alignItems:"center",gap:"8px"});l.appendChild(el("div",{width:"10px",height:"10px",borderRadius:"50%",background:t,flexShrink:"0",boxShadow:"0 0 0 2px rgba("+hexToRgb(t)+",0.2)"})),l.appendChild(el("span",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:n})),r.appendChild(l);const s=el("div",{display:"flex",alignItems:"center",gap:"7px"});if(s.appendChild(el("span",{color:"#fff",borderRadius:"10px",padding:"2px 8px",fontSize:"10px",fontWeight:"700",background:t,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:o.length})),s.appendChild(el("span",{fontSize:"10px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",transition:"transform 0.2s",transform:d?"rotate(180deg)":"rotate(0deg)"},{textContent:"▼"})),r.appendChild(s),r.addEventListener("click",()=>{expSec=expSec===e?null:e,renderDash()}),i.appendChild(r),d){const e=el("div",{marginBottom:"4px"});o.forEach(t=>e.appendChild((a||tCard)(t))),i.appendChild(e)}return i}function addST(e,t,n){const o=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"14px 0 6px",padding:"0 2px"});o.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".08em",textTransform:"uppercase",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:t})),n&&o.appendChild(n),e.appendChild(o)}function refreshDays(e){e.forEach(e=>{e.dueDate&&(e.days=daysFromDate(e.dueDate))})}function sortByDue(e){return e.sort((e,t)=>(e.days||0)-(t.days||0))}function updateTabCounts(){refreshDays(tasks);const e=getRecurringTasks().filter(e=>!tasks.some(t=>t.title===e.title&&t.dueDate===e.dueDate)),t=tasks.length+e.length;document.getElementById("tabDash").textContent="Dashboard"+(t?" ("+t+")":"")}function renderDash(){const e=document.getElementById("dContent");e.innerHTML="",refreshDays(tasks);const t=getRecurringTasks().filter(e=>!tasks.some(t=>t.title===e.title&&t.dueDate===e.dueDate)),n=[...tasks,...t],o=n.filter(e=>"task"===e.type),a=n.filter(e=>"discuss"===e.type),i=n.filter(e=>"delegated"===e.type),d=n.filter(e=>"waiting"===e.type);addST(e,"MY ACTION ITEMS"),e.appendChild(secH("high","#DC2626","High priority",sortByDue(o.filter(e=>"High"===priLabel(e.days))))),e.appendChild(secH("medium","#D97706","Medium priority",sortByDue(o.filter(e=>"Medium"===priLabel(e.days))))),e.appendChild(secH("low","#16A34A","Low priority",sortByDue(o.filter(e=>"Low"===priLabel(e.days))))),addST(e,"DISCUSS"),e.appendChild(secH("discuss","#CA8A04","Items to discuss",sortByDue(a))),addST(e,"MONITORING"),e.appendChild(secH("delegated","#6B7280","Delegated",sortByDue(i))),e.appendChild(secH("waiting","#7C3AED","Waiting",sortByDue(d)));const r=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"⚙ Recurring tasks"});r.addEventListener("click",()=>renderRecurringEditor(e));const l=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"↻ Sync inbox"});l.addEventListener("click",()=>{lastScanTime=0,loadFlaggedEmails(renderDash)});const s=el("div",{display:"flex",gap:"6px",marginTop:"14px",padding:"0 2px"});s.appendChild(l),s.appendChild(r),e.appendChild(s),flagsLoading&&e.appendChild(el("div",{fontSize:"11px",color:"#667085",fontFamily:"'Segoe UI',Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for categorized emails…"})),updateTabCounts()}function renderRecurringEditor(e){e.innerHTML="";const t=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}),n=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"8px",borderBottom:"1px solid #eee"});n.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Recurring Tasks"}));const o=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"← Back"});o.addEventListener("click",()=>renderDash()),n.appendChild(o),t.appendChild(n),t.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Built-in"}));["Monthly Cost Report — 8th","Monthly Cash Flow Model — 9th","Quarterly Instalment Calc — end of Q","Quarterly Instalment Payment — start of Q+1"].forEach(e=>{const n=el("div",{fontSize:"11px",padding:"5px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:e});t.appendChild(n)}),t.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Custom recurring"}));const a=loadCustomRecurring();a.length||t.appendChild(el("div",{fontSize:"11px",color:"#98a2b3",padding:"6px 0",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"No custom recurring tasks yet."})),a.forEach((n,o)=>{const i=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px"});let d=n.title+" — "+n.freq;"monthly"===n.freq&&n.days&&(d+=" (day "+n.days.join(", ")+")"),"quarterly"===n.freq&&(d+=" (day "+n.dayOfMonth+")"),"weekly"===n.freq&&(d+=" ("+["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][n.dayOfWeek||0]+")"),i.appendChild(el("span",{fontSize:"11px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1"},{textContent:d}));const r=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",border:"1px solid #FCA5A5",background:"#FEE2E2",color:"#991b1b",cursor:"pointer",fontWeight:"600",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"✕"});r.addEventListener("click",()=>{a.splice(o,1),saveCustomRecurring(a),renderRecurringEditor(e)}),i.appendChild(r),t.appendChild(i)}),t.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Add new"}));const i=el("div",{background:"#f9fafb",borderRadius:"8px",padding:"10px"});i.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Title"}));const d=mkInput("text",null,"Task name");i.appendChild(d),i.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Frequency"}));const r=document.createElement("select");Object.assign(r.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"}),[["monthly","Monthly"],["quarterly","Quarterly"],["weekly","Weekly"]].forEach(([e,t])=>{const n=document.createElement("option");n.value=e,n.textContent=t,r.appendChild(n)}),i.appendChild(r);const l=el("div",{marginTop:"8px"});function s(){if(l.innerHTML="","monthly"===r.value){l.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day(s) of month (comma-separated)"}));const e=mkInput("text","recDays","e.g. 1, 15");l.appendChild(e)}else if("quarterly"===r.value){l.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of month"}));const e=mkInput("text","recDay","e.g. 15");l.appendChild(e)}else if("weekly"===r.value){l.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of week"}));const e=document.createElement("select");Object.assign(e.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"}),e.id="recDow",["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].forEach((t,n)=>{const o=document.createElement("option");o.value=n,o.textContent=t,e.appendChild(o)}),e.value="1",l.appendChild(e)}}r.addEventListener("change",s),s(),i.appendChild(l),i.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Effort"}));const p=document.createElement("select");Object.assign(p.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"}),["Quick","Medium","Deep"].forEach(e=>{const t=document.createElement("option");t.value=e,t.textContent=e,p.appendChild(t)}),p.value="Medium",i.appendChild(p);const c=el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add recurring task"});c.addEventListener("click",()=>{const t=d.value.trim();if(!t)return;const n=r.value,o={title:t,freq:n,effort:p.value};if("monthly"===n){const e=(document.getElementById("recDays")||{}).value||"1";o.days=e.split(",").map(e=>parseInt(e.trim())).filter(e=>e>=1&&e<=31),o.days.length||(o.days=[1])}else"quarterly"===n?o.dayOfMonth=parseInt((document.getElementById("recDay")||{}).value)||1:"weekly"===n&&(o.dayOfWeek=parseInt((document.getElementById("recDow")||{}).value)||1);a.push(o),saveCustomRecurring(a),renderRecurringEditor(e)}),i.appendChild(c),t.appendChild(i),e.appendChild(t)}localStorage.getItem("k92senderFixV3")||(tasks.forEach(e=>{delete e.sender}),saveTasks(),localStorage.setItem("k92senderFixV3","1"),setTimeout(()=>{lastScanTime=0,loadFlaggedEmails(renderDash)},3e3)),renderDash();const TILES_ALGO_VERSION="4",ZONES=["now","next","later","nottoday"],ZONE_META={now:{label:"Do Now",color:"#DC2626",bg:"#FEF2F2",border:"#FCA5A5",icon:"🔴",max:2,desc:"Your #1 focus right now"},next:{label:"Do Next",color:"#D97706",bg:"#FFFBEB",border:"#FCD34D",icon:"🟡",max:3,desc:"Up next when you finish"},later:{label:"Later Today",color:"#0078D4",bg:"#EFF6FF",border:"#93C5FD",icon:"🔵",max:null,desc:"Get to these if time permits"},nottoday:{label:"Not Today",color:"#6B7280",bg:"#F9FAFB",border:"#D1D5DB",icon:"⚪",max:null,desc:"Parked — revisit tomorrow"}};function loadTilesDate(){try{return localStorage.getItem("k92tilesDate")||""}catch(e){return""}}function saveTilesDate(e){try{localStorage.setItem("k92tilesDate",e)}catch(e){}}function autoAssignZone(e){return 2*(e.importance||3)+(e.days<=0?10:e.days<=1?8:e.days<=2?6:e.days<=5?4:e.days<=7?3:1)}function resetTilesIfNewDay(){const e=dateStr(localToday());loadTilesDate()!==e&&(tasks.forEach(e=>{delete e.zone}),saveTasks(),saveTilesDate(e))}function assignDefaultZones(){refreshDays(tasks);const e=getRecurringTasks().filter(e=>!tasks.some(t=>t.title===e.title&&t.dueDate===e.dueDate)),t=[...tasks,...e],n=t.filter(e=>!e.zone);if(!n.length)return t;n.sort((e,t)=>autoAssignZone(t)-autoAssignZone(e));let o=t.filter(e=>"now"===e.zone).length,a=t.filter(e=>"next"===e.zone).length;return n.forEach(e=>{o<2?(e.zone="now",o++):a<3?(e.zone="next",a++):e.days>=0&&e.days<=7?e.zone="later":e.zone="nottoday"}),saveTasks(),t}function tileSizeStyle(e){return"Deep"===e?{minHeight:"80px",padding:"12px"}:"Quick"===e?{minHeight:"44px",padding:"8px 10px"}:{minHeight:"58px",padding:"10px 11px"}}function renderTiles(){resetTilesIfNewDay();const e=document.getElementById("tilesContent");e.innerHTML="",refreshDays(tasks);const t=assignDefaultZones(),n=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"});n.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Today's Plan"}));const o=el("button",{fontSize:"9px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"↻ Reset"});o.addEventListener("click",()=>{tasks.forEach(e=>{delete e.zone}),saveTasks(),renderTiles()}),n.appendChild(o),e.appendChild(n),ZONES.forEach(n=>{const o=ZONE_META[n],a=t.filter(e=>e.zone===n).sort((e,t)=>autoAssignZone(t)-autoAssignZone(e)),i=el("div",{marginBottom:"10px"}),d=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:"8px",background:o.bg,border:"1px solid "+o.border,marginBottom:"4px"}),r=el("div",{display:"flex",alignItems:"center",gap:"6px"});r.appendChild(el("span",{fontSize:"11px"},{textContent:o.icon})),r.appendChild(el("span",{fontSize:"11.5px",fontWeight:"700",color:o.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:o.label})),o.max&&r.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"(max "+o.max+")"})),d.appendChild(r),d.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:o.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:a.length})),i.appendChild(d),a.length||i.appendChild(el("div",{fontSize:"10px",color:"#98a2b3",padding:"8px 10px",textAlign:"center",fontStyle:"italic",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:o.desc})),a.forEach(e=>{const o=tileSizeStyle(e.effort),a=priColor(e.days),d=el("div",{...o,background:"#fff",border:"1px solid #e5e7eb",borderRadius:"8px",marginBottom:"3px",borderLeft:"3px solid "+a,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",justifyContent:"space-between"}),r=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"4px"});r.appendChild(el("div",{fontSize:"11px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.3",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",overflow:"hidden",textOverflow:"ellipsis"},{textContent:e.title})),e.sender&&r.appendChild(el("span",{fontSize:"8px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(e.sender)})),d.appendChild(r);const l=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"4px"}),s=el("div",{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"}),p=e.days<0?Math.abs(e.days)+"d overdue":0===e.days?"today":e.days+"d";s.appendChild(el("span",{fontSize:"9px",fontWeight:"700",color:a,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:p})),e.importance&&s.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+e.importance}));const c=TC[e.type]||"#666";s.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:c,color:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:TL[e.type]||e.type})),e.effort&&s.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:e.effort})),l.appendChild(s);const f=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"✓"});f.title="Complete",f.addEventListener("click",t=>{t.stopPropagation(),e.emailId&&window.k92Graph&&window.k92Graph.setCategories(e.emailId,[]).then(()=>window.k92Graph.archiveMessage(e.emailId)).catch(e=>console.error("Graph complete failed:",e)),logCompletion(e),e.recurring||removeTask(e.id),renderTiles(),renderDash()});const u=el("div",{display:"flex",gap:"2px"});u.appendChild(f);const m=ZONES.indexOf(n);if(m>0){const o=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▲"});o.title="Move to "+ZONE_META[ZONES[m-1]].label,o.addEventListener("click",()=>{const o=ZONES[m-1],a=ZONE_META[o].max,i=t.filter(e=>e.zone===o).length;if(a&&i>=a){const e=t.filter(e=>e.zone===o).sort((e,t)=>autoAssignZone(e)-autoAssignZone(t));if(e.length){const t=e[0],o=tasks.find(e=>e.id===t.id);o&&(o.zone=n)}}const d=tasks.find(t=>t.id===e.id);d&&(d.zone=o),saveTasks(),renderTiles()}),u.appendChild(o)}if(m<ZONES.length-1){const t=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▼"});t.title="Move to "+ZONE_META[ZONES[m+1]].label,t.addEventListener("click",()=>{const t=tasks.find(t=>t.id===e.id);t&&(t.zone=ZONES[m+1]),saveTasks(),renderTiles()}),u.appendChild(t)}l.appendChild(u),d.appendChild(l),d.addEventListener("mouseenter",()=>{d.style.background="#fafbfc",d.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)"}),d.addEventListener("mouseleave",()=>{d.style.background="#fff",d.style.boxShadow="0 1px 2px rgba(0,0,0,0.04)"}),d.style.cursor="pointer",d.addEventListener("click",t=>{if("BUTTON"!==t.target.tagName&&e.emailId)try{Office.context.mailbox.displayMessageForm(e.emailId)}catch(e){}}),i.appendChild(d)}),e.appendChild(i)});const a=t.filter(e=>"now"===e.zone),i=t.filter(e=>"next"===e.zone),d=a.length+i.length,r={Quick:15,Medium:45,Deep:120},l=[...a,...i].reduce((e,t)=>e+(r[t.effort]||30),0),s=Math.floor(l/60),p=l%60,c=s?s+"h"+(p?" "+p+"m":""):p+"m",f=el("div",{fontSize:"10px",color:"#667085",padding:"8px 10px",textAlign:"center",fontFamily:"'Segoe UI',Arial,sans-serif",borderTop:"1px solid #e5e7eb",marginTop:"6px"});f.textContent=d+" focused task"+(1!==d?"s":"")+" · est. "+c+" · ▲▼ to reprioritize",e.appendChild(f)}let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null;function removeOutlookColour(){Office.context.mailbox.item&&Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],e=>{Office.context.mailbox.item.categories.addAsync(["To be Archived"],()=>{})})}function clearOutlookColour(){Office.context.mailbox.item&&Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],e=>{})}function applyOutlookColour(e){const t=e.days;let n;"task"===e.type?n=t<=2?"High":t<=7?"Med":"Low":"discuss"===e.type?n="Discuss":"waiting"===e.type?n="Waiting":"delegated"===e.type&&(n="Delegate"),n&&Office.context.mailbox.item&&(Office.context.mailbox.item.categories.addAsync([n],e=>{}),e.emailId&&window.k92Graph&&window.k92Graph.setCategories(e.emailId,[n]).catch(e=>console.error("Graph category fallback failed:",e)))}function addOrReplace(e){const t=null!==currentTaskId?tasks.find(e=>e.id===currentTaskId):null,n=t?t.sender:"";null!==currentTaskId&&removeTask(currentTaskId),e.id=nid++,e.emailId=currentEmailId;try{e.conversationId=Office.context.mailbox.item.conversationId||null}catch(t){e.conversationId=null}if(n)e.sender=n;else try{const t=Office.context.mailbox.item;if(t&&t.itemId===currentEmailId){const n=t.from;e.sender=n&&n.displayName?n.displayName:""}else e.sender=""}catch(t){e.sender=""}tasks.push(e),currentTaskId=e.id,saveTasks(),applyOutlookColour(e)}function vRow(e,t,n){const o=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});o.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:e}));const a=el("span",{fontSize:"11px",color:"#222",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});a.textContent=t||"—",o.appendChild(a),n.appendChild(o)}function renderNew(){const e=document.getElementById("eState");e.innerHTML="",document.getElementById("eSnip").textContent=currentEmailSubject,e.appendChild(mkLbl("TASK TYPE")),e.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task  2=Discuss  3=Waiting  4=Delegate"}));const t=el("div",{}),n=el("button",{width:"100%",padding:"10px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",display:"none",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add to tasks"});n.classList.add("kb-group");const o=mkBtn("Cancel","#fff","#475467","1px solid #d0d5dd");o.style.display="none",o.addEventListener("click",()=>{form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},mode="new",renderEmail()});const a=mkTypeGrid(form.type,e=>{form.type=e,buildFields(e,form,t),n.style.display="block",o.style.display="block",setTimeout(()=>{const e=document.getElementById("fDate");e&&e.focus()},50)});a.style.marginTop="4px",e.appendChild(a),e.appendChild(t),form.type&&(buildFields(form.type,form,t),n.style.display="block",o.style.display="block"),n.addEventListener("click",()=>{form.type?form.dueDate?(saved={...form},addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""}),mode="view",renderEmail()):setStatus("Please set a due date.",3e3):setStatus("Please select a task type.",3e3)}),e.appendChild(n),e.appendChild(o)}function renderView(){const e=document.getElementById("eState");e.innerHTML="",document.getElementById("eSnip").textContent=currentEmailSubject;const t=saved.type,n=TC[t]||"#0078D4",o=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"12px",marginBottom:"10px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"}),a=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});a.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:"Type"}));const i=el("span",{fontSize:"11px",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});i.appendChild(el("span",{display:"inline-block",padding:"3px 8px",borderRadius:"6px",fontSize:"11px",fontWeight:"700",background:n,color:"#fff",fontFamily:"Arial,sans-serif"},{textContent:TL[t]})),a.appendChild(i),o.appendChild(a),"waiting"===t?(vRow("Expected",fmtD(saved.dueDate),o),vRow("Importance",saved.importance?"P"+saved.importance:"—",o),vRow("Waiting on",saved.waitingWho||"—",o),saved.notes&&vRow("Details",saved.notes,o)):"delegated"===t?(vRow("Due date",fmtD(saved.dueDate),o),vRow("Importance",saved.importance?"P"+saved.importance:"—",o),vRow("Delegated to",saved.delegateTo||"—",o),saved.notes&&vRow("Notes",saved.notes,o)):"discuss"===t?(vRow("Due date",fmtD(saved.dueDate),o),vRow("Importance",saved.importance?"P"+saved.importance:"—",o),saved.notes&&vRow("Notes",saved.notes,o)):(vRow("Due date",fmtD(saved.dueDate),o),vRow("Importance",saved.importance?"P"+saved.importance:"—",o),saved.effort&&vRow("Effort",saved.effort,o),saved.notes&&vRow("Notes",saved.notes,o)),o.lastChild&&o.lastChild.style&&(o.lastChild.style.borderBottom="none"),e.appendChild(o),e.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"6px"},{textContent:"Shortcut: 1=Edit  2=Complete & archive  3=Cancel"}));const d=mkBtn("Edit task","#fff","#333","1px solid #ccc");d.addEventListener("click",()=>{form={...saved},mode="edit",renderEmail()}),e.appendChild(d);const r=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");r.addEventListener("click",()=>{if(removeOutlookColour(),currentEmailId&&window.k92Graph&&(setStatus("Archiving..."),window.k92Graph.setCategories(currentEmailId,["To be Archived"]).then(()=>window.k92Graph.archiveMessage(currentEmailId)).then(()=>{setStatus("Archived.",3e3)}).catch(e=>{console.error("Archive failed:",e),setStatus("Completed — archive failed, tagged for manual archive.",4e3)})),null!==currentTaskId){const e=tasks.find(e=>e.id===currentTaskId);e&&logCompletion(e),removeTask(currentTaskId)}currentTaskId=null,form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={},mode="new",renderEmail(),renderDash()}),e.appendChild(r);const l=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");l.addEventListener("click",()=>{currentEmailId&&window.k92Graph&&window.k92Graph.setCategories(currentEmailId,[]).catch(e=>console.error("Graph clear categories failed:",e)),clearOutlookColour(),null!==currentTaskId&&removeTask(currentTaskId),currentTaskId=null,form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={},mode="new",renderEmail(),renderDash()}),e.appendChild(l)}function renderEdit(){const e=document.getElementById("eState");e.innerHTML="",document.getElementById("eSnip").textContent=currentEmailSubject,e.appendChild(mkLbl("TASK TYPE"));const t=mkTypeGrid(form.type,null);t.style.marginTop="4px",t.style.pointerEvents="none",t.style.opacity="0.4",e.appendChild(t),e.appendChild(el("div",{fontSize:"10px",color:"#aaa",margin:"2px 0 8px",fontStyle:"italic",fontFamily:"Arial,sans-serif"},{textContent:"Type locked — cancel task to change"}));const n=el("div",{});e.appendChild(n),buildFields(form.type,form,n);const o=mkBtn("Save changes","#0078D4","#fff","none");o.addEventListener("click",()=>{saved={...form},addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""}),mode="view",renderEmail()}),e.appendChild(o);const a=mkBtn("Discard changes","#fff","#333","1px solid #ccc");a.addEventListener("click",()=>{form={...saved},mode="view",renderEmail()}),e.appendChild(a)}function renderEmail(){"new"===mode?renderNew():"view"===mode?renderView():renderEdit()}renderEmail();let dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};function renderManualForm(){const e=document.getElementById("mForm");e.innerHTML="";const t=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});t.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",marginBottom:"12px",paddingBottom:"8px",borderBottom:"1px solid #eee",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"New manual task"})),t.appendChild(mkLbl("TITLE"));const n=mkInput("text","mTitle","What needs to be done?");t.appendChild(n),t.appendChild(mkLbl("TASK TYPE"));const o=el("div",{}),a=mkTypeGrid(dType,e=>{dType=e,dForm.type=e,buildFields(e,dForm,o)});a.style.marginTop="4px",t.appendChild(a),t.appendChild(o);const i=el("div",{display:"flex",gap:"5px",marginTop:"8px"}),d=el("button",{flex:"1",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add task"});d.addEventListener("click",()=>{const e=n.value.trim()||"Manual task";tasks.push({id:nid++,title:e,days:daysFromDate(dForm.dueDate),dueDate:dForm.dueDate||"",type:dType||"task",effort:dForm.effort||"",importance:dForm.importance||null,who:dForm.waitingWho||dForm.delegateTo||"",delegateTo:dForm.delegateTo||"",waitingWho:dForm.waitingWho||"",notes:dForm.notes||""}),saveTasks(),document.getElementById("mForm").style.display="none",document.getElementById("newTaskBtn").style.display="block",n.value="",dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},renderDash()});const r=el("button",{padding:"0 12px",height:"36px",borderRadius:"8px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"Cancel"});r.addEventListener("click",()=>{document.getElementById("mForm").style.display="none",document.getElementById("newTaskBtn").style.display="block"}),i.appendChild(d),i.appendChild(r),t.appendChild(i),e.appendChild(t)}function switchTab(e){["Email","Dash","Tiles"].forEach(t=>{document.getElementById("p"+t).classList.toggle("active",t===e),document.getElementById("tab"+t).classList.toggle("on",t===e)})}document.getElementById("newTaskBtn").addEventListener("click",()=>{document.getElementById("mForm").style.display="block",document.getElementById("newTaskBtn").style.display="none",renderManualForm()}),document.getElementById("tabEmail").addEventListener("click",()=>switchTab("Email")),document.getElementById("tabDash").addEventListener("click",()=>{switchTab("Dash"),loadFlaggedEmails(renderDash)}),document.getElementById("tabTiles").addEventListener("click",()=>{switchTab("Tiles"),renderTiles()});const typeKeys={1:"task",2:"discuss",3:"waiting",4:"delegated"};function onItemChanged(){const e=Office.context.mailbox.item;if(!e)return currentEmailSubject="Select an email to begin",currentEmailId=null,document.getElementById("eSnip").textContent=currentEmailSubject,mode="new",form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={},currentTaskId=null,void renderEmail();currentEmailSubject=e.subject||"No subject",currentEmailId=e.itemId,document.getElementById("eSnip").textContent=currentEmailSubject,isPending(currentEmailId)&&Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],e=>{Office.context.mailbox.item.categories.addAsync(["To be Archived"],()=>{}),removePending(currentEmailId)});const t=tasks.find(e=>e.emailId===currentEmailId)||tasks.find(e=>e.conversationId&&Office.context.mailbox.item.conversationId&&e.conversationId===Office.context.mailbox.item.conversationId)||tasks.find(e=>e.title&&e.title===currentEmailSubject);if(!t){currentTaskId=null,mode="new",form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""},saved={};const e=currentEmailId,t=currentEmailSubject;return void Office.context.mailbox.item.categories.getAsync(n=>{if(currentEmailId!==e)return;if(n.status!==Office.AsyncResultStatus.Succeeded||!n.value||0===n.value.length)return void renderEmail();const o=n.value.map(e=>e.displayName),a={High:"task",Med:"task",Low:"task",Discuss:"discuss",Waiting:"waiting",Delegate:"delegated"},i=o.find(e=>a[e]);if(!i)return void renderEmail();const d=a[i],r="High"===i?2:"Med"===i?7:14,l=new Date(localToday().getTime()+864e5*r),s=l.getFullYear()+"-"+String(l.getMonth()+1).padStart(2,"0")+"-"+String(l.getDate()).padStart(2,"0"),p={title:t,days:r,dueDate:s,type:d,effort:"",importance:"High"===i?1:"Med"===i?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:e};try{p.conversationId=Office.context.mailbox.item.conversationId||null}catch(e){p.conversationId=null}try{const e=Office.context.mailbox.item.from;p.sender=e&&e.displayName?e.displayName:""}catch(e){p.sender=""}tasks.push(p),saveTasks(),currentTaskId=p.id,saved={type:d,effort:"",importance:p.importance,dueDate:s,delegateTo:"",waitingWho:"",notes:""},mode="view",renderEmail(),renderDash(),setStatus("Task auto-created from email category.",3e3)})}currentTaskId=t.id,saved={type:t.type,effort:t.effort||"",importance:t.importance||null,dueDate:t.dueDate||"",delegateTo:t.delegateTo||"",waitingWho:t.waitingWho||"",notes:t.notes||""},mode="view",t.emailId!==currentEmailId&&applyOutlookColour(t),renderEmail()}document.addEventListener("keydown",e=>{if(e.altKey&&"1"===e.key)return e.preventDefault(),void switchTab("Email");if(e.altKey&&"2"===e.key)return e.preventDefault(),switchTab("Dash"),void loadFlaggedEmails(renderDash);if(e.altKey&&"3"===e.key)return e.preventDefault(),switchTab("Tiles"),void renderTiles();const t=document.activeElement&&document.activeElement.tagName;if("INPUT"===t||"TEXTAREA"===t||"SELECT"===t)return;const n=typeKeys[e.key],o=document.getElementById("pEmail");if(o&&o.classList.contains("active")&&n){if("view"===mode){const t=document.getElementById("eState");if(!t)return;const n=t.querySelectorAll("button"),o={1:0,2:1,3:2}[e.key];return void(void 0!==o&&n[o]&&(e.preventDefault(),n[o].click()))}if("new"!==mode&&"edit"!==mode)return;const t=o.querySelector('button[data-type="'+n+'"]');t&&(t.click(),e.preventDefault(),setTimeout(()=>{const e=document.getElementById("fDate");e&&e.focus()},80))}}),Office.onReady(e=>{e.host===Office.HostType.Outlook&&(window.k92Graph&&window.k92Graph.init().catch(e=>console.warn("MSAL init deferred:",e)),Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,onItemChanged),onItemChanged(),loadFlaggedEmails(renderDash))})</script></body></html>
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8" />
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Tasks</title>
+  <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', Arial, sans-serif; font-size: 12px; background: #f4f5f7; color: #1a1a1a; }
+    .tabs { display: flex; background: linear-gradient(135deg, #0062B8 0%, #0078D4 50%, #1a8ae6 100%); padding: 6px 6px 0; gap: 3px; }
+    .tab { flex: 1; padding: 9px 6px; font-size: 11px; font-weight: 600; border: none; cursor: pointer; background: transparent; color: rgba(255,255,255,0.65); border-radius: 8px 8px 0 0; font-family: 'Segoe UI', Arial, sans-serif; transition: all 0.2s ease; letter-spacing: 0.3px; position: relative; }
+    .tab:hover { color: #fff; background: rgba(255,255,255,0.12); }
+    .tab.on { color: #0078D4; background: #f4f5f7; font-weight: 700; box-shadow: 0 -2px 8px rgba(0,0,0,0.06); }
+    .tc { padding: 12px; overflow-y: auto; flex: 1; display: none; }
+    .tc.active { display: block; }
+    input[type=date], input[type=text], textarea { width: 100%; padding: 7px 10px; font-size: 12px; border-radius: 6px; border: 1px solid #d0d5dd; font-family: 'Segoe UI', Arial, sans-serif; background: #fff; color: #222; transition: border-color 0.15s, box-shadow 0.15s; }
+    input[type=date]:focus, input[type=text]:focus, textarea:focus { outline: none; border-color: #0078D4; box-shadow: 0 0 0 2px rgba(0,120,212,0.15); }
+    textarea { resize: none; }
+    .snip { font-size: 12px; color: #333; margin-bottom: 12px; padding: 8px 10px; background: #fff; border-radius: 8px; border-left: 3px solid #0078D4; font-family: 'Segoe UI', Arial, sans-serif; box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-weight: 600; }
+    .ntb { width: 100%; padding: 10px; border-radius: 8px; border: 1.5px dashed #0078D4; background: rgba(0,120,212,0.04); color: #0078D4; font-weight: 600; font-size: 12px; cursor: pointer; font-family: 'Segoe UI', Arial, sans-serif; margin-bottom: 12px; display: block; transition: all 0.15s; }
+    .ntb:hover { background: rgba(0,120,212,0.1); border-style: solid; }
+    .sidebar-content { height: calc(100vh - 46px); overflow-y: auto; }
+    #eStatus { font-size: 10px; color: #666; font-style: italic; margin-bottom: 4px; min-height: 14px; font-family: 'Segoe UI', Arial, sans-serif; }
+    #dbgLog { font-size: 9px; color: #333; font-family: monospace; background: #f0f0f0; border: 1px solid #ccc; border-radius: 5px; padding: 5px; margin-bottom: 6px; max-height: 120px; overflow-y: auto; display: none; white-space: pre-wrap; word-break: break-all; }
+    button { transition: all 0.12s ease; }
+    button:active { transform: scale(0.97); }
+  </style>
+<script defer src="polyfill.js"></script><script defer src="taskpane.js"></script></head>
+<body>
+  <div class="tabs">
+    <button class="tab on" id="tabEmail">Email</button>
+    <button class="tab" id="tabDash">Dashboard</button>
+    <button class="tab" id="tabTiles">Tiles</button>
+  </div>
+  <div class="sidebar-content">
+    <div class="tc active" id="pEmail">
+      <div id="eSnip" class="snip">Select an email to begin</div>
+      <div id="eStatus"></div>
+      <div id="dbgLog"></div>
+      <div id="eState"></div>
+    </div>
+    <div class="tc" id="pDash">
+      <input type="text" id="dashSearch" placeholder="Search tasks..." style="width:100%;padding:7px 10px;font-size:11px;border-radius:6px;border:1px solid #d0d5dd;margin-bottom:6px;font-family:'Segoe UI',Arial,sans-serif;background:#fff;color:#222;">
+      <div id="dashFilterRow" style="display:flex;gap:4px;margin-bottom:8px;flex-wrap:wrap;align-items:center;"></div>
+      <button class="ntb" id="newTaskBtn">+ New manual task</button>
+      <div id="mForm" style="display:none"></div>
+      <div id="dContent"></div>
+    </div>
+    <div class="tc" id="pTiles">
+      <div id="tilesContent"></div>
+    </div>
+  </div>
+
+  <script>
+    const TC = { task:"#0078D4", discuss:"#BA7517", waiting:"#7C3AED", delegated:"#4B5563" };
+    const TL = { task:"Task", discuss:"Discuss", waiting:"Waiting", delegated:"Delegate" };
+    const EC = "#185FA5";
+
+    // ── Debug log ─────────────────────────────────────────────
+    function dbg(msg) {
+      const el = document.getElementById("dbgLog");
+      if(!el) return;
+      el.style.display = "block";
+      const txt = el.querySelector(".dbg-text");
+      if(!txt) return;
+      txt.textContent += new Date().toLocaleTimeString() + " " + msg + "\n";
+      txt.scrollTop = txt.scrollHeight;
+    }
+    function dbgClear() {
+      const el = document.getElementById("dbgLog");
+      if(!el) return;
+      const txt = el.querySelector(".dbg-text");
+      if(txt) txt.textContent = "";
+      el.style.display = "none";
+    }
+    function buildDbgPanel() {
+      const wrap = document.getElementById("dbgLog");
+      if(!wrap || wrap.children.length > 0) return;
+      const hdr = document.createElement("div");
+      hdr.style.cssText = "display:flex;justify-content:space-between;margin-bottom:3px;";
+      const lbl = document.createElement("span");
+      lbl.style.cssText = "font-size:9px;font-weight:700;color:#666;";
+      lbl.textContent = "DEBUG LOG";
+      const copyBtn = document.createElement("button");
+      copyBtn.textContent = "📋 Copy";
+      copyBtn.style.cssText = "font-size:9px;padding:1px 5px;border-radius:3px;border:1px solid #ccc;background:#fff;cursor:pointer;";
+      copyBtn.addEventListener("click", () => {
+        const text = wrap.querySelector(".dbg-text").textContent;
+        navigator.clipboard.writeText(text).then(() => { copyBtn.textContent = "✓ Copied!"; setTimeout(() => copyBtn.textContent = "📋 Copy", 2000); });
+      });
+      hdr.appendChild(lbl); hdr.appendChild(copyBtn); wrap.appendChild(hdr);
+      const pre = document.createElement("pre");
+      pre.className = "dbg-text";
+      pre.style.cssText = "font-size:9px;max-height:100px;overflow-y:auto;margin:0;white-space:pre-wrap;word-break:break-all;";
+      wrap.appendChild(pre);
+    }
+
+    // ── Status message ────────────────────────────────────────
+    function setStatus(msg, dur) {
+      const s = document.getElementById("eStatus");
+      if(s) { s.textContent = msg; if(dur) setTimeout(()=>{ if(s.textContent===msg) s.textContent=""; }, dur); }
+    }
+
+    // ── Pending colour removal ────────────────────────────────
+    function loadPending(){try{return JSON.parse(localStorage.getItem('k92pending')||'[]');}catch(e){return[];}}
+    function savePending(p){try{localStorage.setItem('k92pending',JSON.stringify(p));}catch(e){}}
+    function addPending(emailId){if(!emailId)return;const p=loadPending();if(!p.includes(emailId)){p.push(emailId);savePending(p);}}
+    function removePending(emailId){const p=loadPending().filter(id=>id!==emailId);savePending(p);}
+    function isPending(emailId){return loadPending().includes(emailId);}
+
+    // ── Date helpers ──────────────────────────────────────────
+    function localToday() { const n=new Date(); return new Date(n.getFullYear(),n.getMonth(),n.getDate()); }
+    function daysFromDate(d) { if(!d)return 7; const p=d.split('-').map(Number); return Math.round((new Date(p[0],p[1]-1,p[2])-localToday())/864e5); }
+    function fmtD(d) { if(!d)return"—"; const p=d.split("-"); if(p.length!==3)return d; return parseInt(p[2])+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1])-1]+" "+p[0]; }
+    function dateStr(dt) { return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
+    const pri = d => d<=2?{l:"High",c:"#DC2626",lbl:"red"}:d<=7?{l:"Medium",c:"#EA580C",lbl:"orange"}:{l:"Low",c:"#16A34A",lbl:"green"};
+
+    // ── DOM helpers ───────────────────────────────────────────
+    function hexToRgb(hex){const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return r+","+g+","+b;}
+    function el(tag,styles,props) { const e=document.createElement(tag); if(styles)Object.assign(e.style,styles); if(props)Object.assign(e,props); return e; }
+    function mkLbl(text) { return el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",marginTop:"10px",display:"block"},{textContent:text}); }
+    function mkInput(type,id,placeholder) { const i=document.createElement("input"); Object.assign(i.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",display:"block"}); i.type=type; if(id)i.id=id; if(placeholder)i.placeholder=placeholder; if(type==="date"){i.addEventListener("focus",()=>{try{i.showPicker();}catch(e){}});i.addEventListener("keydown",ev=>{if(ev.key==="Enter"){ev.preventDefault();i.dispatchEvent(new Event("change",{bubbles:true}));setTimeout(()=>{const grps=Array.from(document.querySelectorAll(".kb-group"));const parent=i.closest(".kb-group");const gi=grps.indexOf(parent);if(gi>=0&&gi<grps.length-1){const ng=grps[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}},50);}});i.addEventListener("change",()=>{setTimeout(()=>{const grps=Array.from(document.querySelectorAll(".kb-group"));const parent=i.closest(".kb-group");const gi=grps.indexOf(parent);if(gi>=0&&gi<grps.length-1){const ng=grps[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}},50);});} return i; }
+    function mkTextarea(id,placeholder,rows) { const t=document.createElement("textarea"); Object.assign(t.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",resize:"none",display:"block"}); t.rows=rows||2; if(id)t.id=id; if(placeholder)t.placeholder=placeholder; return t; }
+    function mkPill(text,bg,color,border) { return el("div",{background:bg,color:color,border:"1px solid "+border,borderRadius:"8px",padding:"7px 10px",fontSize:"11px",marginTop:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:text}); }
+    function mkBtn(text,bg,color,border) { return el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:border||"none",background:bg,color:color,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",display:"block",boxShadow:"0 1px 2px rgba(0,0,0,0.06)"},{textContent:text}); }
+    function sType(b,on) { const c=TC[b.dataset.type]||"#0078D4"; Object.assign(b.style,{height:"34px",width:"100%",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"8px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 6px",border:on?"2px solid "+c:"1.5px solid #d0d5dd",background:on?c:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"0 1px 2px rgba(0,0,0,0.04)"}); }
+    function sEff(b,on) { Object.assign(b.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 4px",border:on?"2px solid "+EC:"1.5px solid #d0d5dd",background:on?EC:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"none"}); }
+    function sImp(b,on) {
+      const val=parseInt(b.dataset.imp);
+      const c=val>=4?"#DC2626":val===3?"#EA580C":"#16A34A";
+      Object.assign(b.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",padding:"0 2px",border:on?"2px solid "+c:"1.5px solid #d0d5dd",background:on?c:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"none"});
+    }
+    function mkTypeGrid(cur,cb) {
+      const g=el("div",{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px"});
+      Object.keys(TL).forEach(t=>{ const b=el("button",{},{textContent:TL[t]}); b.dataset.type=t; sType(b,t===cur); b.addEventListener("click",()=>{ g.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===t)); if(cb)cb(t); }); g.appendChild(b); });
+      return g;
+    }
+    // Arrow-key navigation for button groups
+    function addArrowNav(container,className){
+      // When container receives focus, delegate to first button (or selected one)
+      container.addEventListener("focus",()=>{
+        const btns=Array.from(container.querySelectorAll("button"));
+        // Find already-selected button (has bold border) or default to first
+        const selected=btns.find(b=>b.style.fontWeight==="700")||btns[0];
+        if(selected)selected.focus();
+      });
+      container.addEventListener("keydown",e=>{
+        const btns=Array.from(container.querySelectorAll("button"));
+        const idx=btns.indexOf(document.activeElement);
+        if(idx<0)return;
+        if(e.key==="ArrowRight"||e.key==="ArrowDown"){e.preventDefault();const next=btns[(idx+1)%btns.length];next.focus();next.click();}
+        else if(e.key==="ArrowLeft"||e.key==="ArrowUp"){e.preventDefault();const prev=btns[(idx-1+btns.length)%btns.length];prev.focus();prev.click();}
+        else if(e.key==="Enter"||e.key===" "){
+          // Confirm selection and advance to next group
+          e.preventDefault();
+          btns[idx].click();
+          const allGroups=Array.from(document.querySelectorAll(".kb-group"));
+          const gi=allGroups.indexOf(container);
+          if(gi>=0&&gi<allGroups.length-1){const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
+        }
+        else if(e.key==="Tab"&&!e.shiftKey){
+          // Tab also advances to next field group
+          e.preventDefault();
+          const allGroups=Array.from(document.querySelectorAll(".kb-group"));
+          const gi=allGroups.indexOf(container);
+          if(gi>=0&&gi<allGroups.length-1){const ng=allGroups[gi+1];const first=ng.querySelector("button,input,textarea");if(first)first.focus();}
+        }
+      });
+      container.classList.add("kb-group");
+      container.setAttribute("tabindex","0");
+    }
+    function mkEffortRow(cur,onSelect) {
+      const r=el("div",{display:"flex",gap:"4px"});
+      ["Quick","Medium","Deep"].forEach(e=>{ const b=el("button",{},{textContent:e}); b.dataset.e=e; sEff(b,!!cur&&e===cur); b.addEventListener("click",()=>{ r.querySelectorAll("button").forEach(x=>sEff(x,x.dataset.e===e)); if(onSelect)onSelect(e); }); r.appendChild(b); });
+      addArrowNav(r);
+      return r;
+    }
+    function mkImportanceRow(cur, onSelect) {
+      // 1=lowest, 5=highest. No default pre-selected.
+      const wrap = el("div",{});
+      const r = el("div",{display:"flex",gap:"3px"});
+      for(let v=1;v<=5;v++){
+        const b=el("button",{},{textContent:v});
+        b.dataset.imp=String(v);
+        sImp(b, cur!==null && cur===v);
+        b.addEventListener("click",()=>{
+          r.querySelectorAll("button").forEach(x=>sImp(x,parseInt(x.dataset.imp)===v));
+          if(onSelect)onSelect(v);
+        });
+        r.appendChild(b);
+      }
+      addArrowNav(r);
+      const hint=el("div",{fontSize:"9px",color:"#aaa",fontFamily:"Arial,sans-serif",marginTop:"2px",display:"flex",justifyContent:"space-between"});
+      hint.appendChild(el("span",{},{textContent:"Low"}));
+      hint.appendChild(el("span",{},{textContent:"High"}));
+      wrap.appendChild(r);
+      wrap.appendChild(hint);
+      return wrap;
+    }
+    function mkTaskColourPill() { return el("div",{borderRadius:"7px",padding:"6px 9px",fontSize:"11px",marginTop:"8px",lineHeight:"1.4",fontFamily:"Arial,sans-serif",border:"1px solid #ddd",background:"#f5f5f5",color:"#555"},{textContent:"Pick a due date to see Outlook tag colour"}); }
+    function updateTaskColourPill(pill,dueDate) {
+      if(!dueDate){Object.assign(pill.style,{background:"#f5f5f5",color:"#555",border:"1px solid #ddd"});pill.textContent="Pick a due date to see Outlook tag colour";return;}
+      const d=daysFromDate(dueDate),p=pri(d);
+      const configs={"#DC2626":["#FEE2E2","#991b1b","#FCA5A5"],"#EA580C":["#FFEDD5","#9a3412","#FED7AA"],"#16A34A":["#DCFCE7","#166534","#86EFAC"]};
+      const c=configs[p.c]||configs["#16A34A"];
+      Object.assign(pill.style,{background:c[0],color:c[1],border:"1px solid "+c[2]});
+      pill.textContent="Will be tagged "+p.lbl+" in Outlook ("+d+" day"+(d===1?"":"s")+" away — "+p.l+" priority)";
+    }
+    function wrapKbGroup(input){const w=el("div",{});w.classList.add("kb-group");w.appendChild(input);return w;}
+    function buildFields(type,form,container) {
+      container.innerHTML="";
+      if(type==="waiting"){
+        container.appendChild(mkLbl("EXPECTED BY")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("WAITING ON")); const fw=mkInput("text","fWho","Person / organisation"); fw.value=form.waitingWho||""; fw.addEventListener("input",e=>form.waitingWho=e.target.value); container.appendChild(wrapKbGroup(fw));
+        container.appendChild(mkLbl("WHAT ARE YOU WAITING FOR?")); const fn=mkTextarea("fNotes","Describe what you need..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
+        container.appendChild(mkPill("Will be tagged purple in Outlook","#EEEDFE","#3C3489","#AFA9EC"));
+      } else if(type==="delegated"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("DELEGATE TO")); const fw=mkInput("text","fWho","Team member name"); fw.value=form.delegateTo||""; fw.addEventListener("input",e=>form.delegateTo=e.target.value); container.appendChild(wrapKbGroup(fw));
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
+        container.appendChild(mkPill("Will be tagged gray in Outlook","#f0f0f0","#555","#ddd"));
+      } else if(type==="discuss"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
+        container.appendChild(mkPill("Will appear in Discuss section","#FAEEDA","#633806","#FAC775"));
+      } else if(type==="task"){
+        container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value;
+        const pill=mkTaskColourPill();
+        fd.addEventListener("change",e=>{form.dueDate=e.target.value;updateTaskColourPill(pill,form.dueDate);}); container.appendChild(wrapKbGroup(fd));
+        container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("EFFORT")); const er=mkEffortRow(form.effort||"",v=>form.effort=v); container.appendChild(er);
+        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional context..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
+        container.appendChild(pill); if(form.dueDate)updateTaskColourPill(pill,form.dueDate);
+      }
+    }
+
+    // ── Task store ────────────────────────────────────────────
+    function loadTasks(){try{return JSON.parse(localStorage.getItem('k92tasks')||'[]');}catch(e){return[];}}
+    function saveTasks(){try{localStorage.setItem('k92tasks',JSON.stringify(tasks));}catch(e){}}
+    // Deduplicate existing tasks on load (by title+type, keep first)
+    function deduplicateTasks(list){
+      const seen=new Set();
+      return list.filter(t=>{
+        const key=(t.title||"")+"|||"+(t.type||"");
+        if(seen.has(key))return false;
+        seen.add(key);return true;
+      });
+    }
+    const tasks=deduplicateTasks(loadTasks());
+    saveTasks(); // persist cleanup
+    let nid=tasks.length>0?Math.max(1,...tasks.map(t=>typeof t.id==="number"?t.id:0))+1:1;
+    function removeTask(id){const i=tasks.findIndex(t=>t.id===id);if(i>-1){tasks.splice(i,1);saveTasks();}}
+
+    // ── Completions log ─────────────────────────────────────
+    function loadCompletions(){try{return JSON.parse(localStorage.getItem('k92completions')||'[]');}catch(e){return[];}}
+    function saveCompletions(list){try{localStorage.setItem('k92completions',JSON.stringify(list));}catch(e){}}
+    function logCompletion(task){
+      const list=loadCompletions();
+      list.push({title:task.title,type:task.type,date:dateStr(localToday()),dueDate:task.dueDate||"",effort:task.effort||""});
+      const cutoff=new Date(localToday().getTime()-30*864e5);
+      const filtered=list.filter(c=>{const p=c.date.split("-").map(Number);return new Date(p[0],p[1]-1,p[2])>=cutoff;});
+      saveCompletions(filtered);
+    }
+
+    // ── Recurring tasks ───────────────────────────────────────
+    function loadCustomRecurring(){try{return JSON.parse(localStorage.getItem('k92recurring')||'[]');}catch(e){return[];}}
+    function saveCustomRecurring(list){try{localStorage.setItem('k92recurring',JSON.stringify(list));}catch(e){}}
+
+    function getRecurringTasks(){
+      const today=localToday(),y=today.getFullYear(),m=today.getMonth(),recurring=[];
+      function addIfDue(title,dueDate,effort){
+        const days=Math.round((dueDate-today)/864e5);
+        if(days>=0&&days<=7)recurring.push({id:"rec_"+title.replace(/\s/g,"_")+"_"+dateStr(dueDate),title,days,type:"task",effort:effort||"Medium",importance:3,dueDate:dateStr(dueDate),recurring:true});
+      }
+      const lastDay=new Date(y,m+1,0);
+      addIfDue("Monthly Cost Report",new Date(y,m,8),"Deep");
+      addIfDue("Monthly Cash Flow Model",new Date(y,m,9),"Deep");
+      [[2,31],[5,30],[8,30]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Calculation",new Date(y,mo,day),"Medium"));
+      [[3,30],[6,31],[9,31]].forEach(([mo,day])=>addIfDue("Quarterly Instalment Payment",new Date(y,mo,day),"Quick"));
+      // Custom recurring tasks from editor
+      const custom=loadCustomRecurring();
+      custom.forEach(cr=>{
+        if(cr.freq==="monthly"){
+          (cr.days||[]).forEach(day=>{
+            const d=Math.min(day,lastDay.getDate());
+            addIfDue(cr.title,new Date(y,m,d),cr.effort||"Medium");
+          });
+        } else if(cr.freq==="quarterly"){
+          const qMonths=[0,3,6,9];
+          qMonths.forEach(qm=>{
+            const qLast=new Date(y,qm+1,0);
+            const d=Math.min(cr.dayOfMonth||1,qLast.getDate());
+            addIfDue(cr.title,new Date(y,qm,d),cr.effort||"Medium");
+          });
+        } else if(cr.freq==="weekly"){
+          for(let i=0;i<7;i++){
+            const dt=new Date(today.getTime()+i*864e5);
+            if(dt.getDay()===(cr.dayOfWeek||1))addIfDue(cr.title,dt,cr.effort||"Medium");
+          }
+        }
+      });
+      const completions=loadCompletions();
+      return recurring.filter(r=>!completions.some(c=>c.title===r.title&&(c.date===r.dueDate||c.dueDate===r.dueDate)));
+    }
+
+    const priColor=d=>d<=2?"#DC2626":d<=7?"#D97706":"#16A34A";
+    const priLabel=d=>d<=2?"High":d<=7?"Medium":"Low";
+    let expSec="high";
+
+    // ── Inbox scan ────────────────────────────────────────────
+    let flaggedEmails=[];
+    let flagsLoading=false;
+    let lastScanTime=0;
+    const SCAN_COOLDOWN=60000; // 60 second debounce
+
+    // Backfill sender names for tasks — forceAll=true re-fetches even existing senders
+    function backfillSenders(forceAll){
+      if(!window.k92Graph||!window.k92Graph.getSender)return;
+      const targets=forceAll?tasks.filter(t=>t.emailId):tasks.filter(t=>t.emailId&&!t.sender);
+      if(!targets.length)return;
+      let i=0;
+      function next(){
+        if(i>=targets.length)return;
+        const t=targets[i++];
+        window.k92Graph.getSender(t.emailId).then(name=>{
+          if(name){t.sender=name;saveTasks();renderDash();}
+          next();
+        }).catch(()=>next());
+      }
+      next();
+    }
+    // One-time forced re-fetch of all senders to fix incorrect data
+    // One-time fix: clear wrong senders and force a scan to repopulate from Graph data
+    if(!localStorage.getItem("k92senderFixV3")){
+      tasks.forEach(t=>{delete t.sender;});saveTasks();
+      localStorage.setItem("k92senderFixV3","1");
+      setTimeout(()=>{lastScanTime=0;loadFlaggedEmails(renderDash);},3000);
+    }
+
+    function loadFlaggedEmails(cb){
+      // Debounce: skip if scanned within cooldown period
+      const now=Date.now();
+      if(now-lastScanTime<SCAN_COOLDOWN){if(cb)cb();return;}
+      lastScanTime=now;
+      if(!window.k92Graph){if(cb)cb();return;}
+      flagsLoading=true;renderDash();
+      window.k92Graph.scanCategorizedEmails().then(msgs=>{
+        flagsLoading=false;
+        // Deduplicate by conversationId — keep only the latest per conversation
+        const seen=new Set();
+        const deduped=[];
+        msgs.forEach(m=>{
+          const key=m.conversationId||m.id;
+          if(!seen.has(key)){seen.add(key);deduped.push(m);}
+        });
+        // Auto-create tasks for categorized emails not already tracked
+        const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
+        deduped.forEach(m=>{
+          const existing=tasks.find(t=>
+            (t.conversationId && m.conversationId && t.conversationId===m.conversationId) ||
+            (t.emailId && t.emailId===m.id) ||
+            (t.title && m.subject && t.title===m.subject)
+          );
+          if(existing){
+            // Backfill conversationId, always update sender from scan data
+            let changed=false;
+            if(!existing.conversationId && m.conversationId){existing.conversationId=m.conversationId;changed=true;}
+            const fromN=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
+            if(fromN&&existing.sender!==fromN){existing.sender=fromN;changed=true;}
+            if(changed)saveTasks();
+            return;
+          }
+          const found=(m.categories||[]).find(c=>catMap[c]);
+          if(!found)return;
+          const type=catMap[found];
+          const defaultDays=found==="High"?2:found==="Med"?7:14;
+          const due=new Date(localToday().getTime()+defaultDays*864e5);
+          const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
+          const fromName=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
+          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null,sender:fromName});
+        });
+        // Remove stale tasks: tasks with emailId that are no longer in the scan results
+        const scannedIds=new Set(deduped.map(m=>m.id));
+        const scannedConvIds=new Set(deduped.filter(m=>m.conversationId).map(m=>m.conversationId));
+        const staleIds=[];
+        tasks.forEach(t=>{
+          if(!t.emailId)return; // manual tasks — keep
+          // If this task's email or conversation is still in scan, keep it
+          if(scannedIds.has(t.emailId))return;
+          if(t.conversationId && scannedConvIds.has(t.conversationId))return;
+          // This task's email is no longer categorized — remove it
+          staleIds.push(t.id);
+        });
+        staleIds.forEach(id=>removeTask(id));
+        saveTasks();
+        flaggedEmails=[];
+        if(cb)cb();else renderDash();
+        // Backfill sender for existing tasks missing it
+        backfillSenders();
+      }).catch(e=>{
+        flagsLoading=false;
+        console.error("Graph scan failed:",e);
+        flaggedEmails=[];
+        if(cb)cb();else renderDash();
+      });
+    }
+
+    // Format sender: handle "Last, First" → "First Last", then display as "First L."
+    function fmtSender(name){
+      if(!name)return"";
+      let n=name.trim();
+      // Detect "Last, First" format and flip
+      if(n.indexOf(",")>0){const p=n.split(",").map(s=>s.trim());if(p.length===2&&p[0]&&p[1])n=p[1]+" "+p[0];}
+      const parts=n.split(/\s+/);
+      return parts.length>1?parts[0]+" "+parts[parts.length-1][0]+".":parts[0];
+    }
+
+    // ── Task cards ────────────────────────────────────────────
+    function tCard(t){
+      const c=priColor(t.days),dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"Due today":t.days+"d left";
+      const card=el("div",{padding:"10px 11px",background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",marginBottom:"4px",borderLeft:"3px solid "+c,boxShadow:"0 1px 3px rgba(0,0,0,0.04)",position:"relative"});
+      // Notes tooltip on hover
+      let noteTip=null;
+      card.addEventListener("mouseenter",()=>{
+        card.style.background="#fafbfc";card.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";
+        if(t.notes){
+          noteTip=el("div",{position:"absolute",left:"0",right:"0",bottom:"100%",marginBottom:"4px",background:"#333",color:"#fff",padding:"6px 9px",borderRadius:"6px",fontSize:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif",zIndex:"100",boxShadow:"0 4px 12px rgba(0,0,0,0.2)",pointerEvents:"none",maxHeight:"80px",overflow:"hidden",wordBreak:"break-word"},{textContent:t.notes});
+          card.appendChild(noteTip);
+        }
+      });
+      card.addEventListener("mouseleave",()=>{
+        card.style.background="#fff";card.style.boxShadow="0 1px 3px rgba(0,0,0,0.04)";
+        if(noteTip){noteTip.remove();noteTip=null;}
+      });
+      // Title row with sender in top-right
+      const titleRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"6px",marginBottom:"5px"});
+      titleRow.appendChild(el("div",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.35",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",minWidth:"0",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},{textContent:t.title}));
+      if(t.sender){
+        titleRow.appendChild(el("span",{fontSize:"9px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(t.sender)}));
+      }
+      card.appendChild(titleRow);
+      const meta=el("div",{display:"flex",alignItems:"center",gap:"5px",flexWrap:"wrap",marginBottom:"7px"});
+      meta.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:c,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:dl}));
+      if(t.importance)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+t.importance}));
+      if(t.effort)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:t.effort}));
+      if(t.recurring)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EFF6FF",color:"#1e40af",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"recurring"}));
+      if(t.notes)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#FFFBEB",color:"#92400E",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"📝"}));
+      if(t.type==="delegated"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"→ "+t.who}));
+      if(t.type==="waiting"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#EEEDFE",color:"#3C3489",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"waiting: "+t.who}));
+      card.appendChild(meta);
+      // Action buttons row
+      const br=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center"});
+      // Snooze buttons (only for non-recurring tasks)
+      if(!t.recurring){
+        const snoozeWrap=el("div",{display:"flex",gap:"3px",alignItems:"center"});
+        snoozeWrap.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Snooze:"}));
+        [1,3].forEach(d=>{
+          const sb=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",cursor:"pointer",fontWeight:"600",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"+"+d+"d"});
+          sb.addEventListener("mouseenter",()=>{sb.style.background="#e5e7eb";});
+          sb.addEventListener("mouseleave",()=>{sb.style.background="#f9fafb";});
+          sb.addEventListener("click",(ev)=>{
+            ev.stopPropagation();
+            const task=tasks.find(x=>x.id===t.id);
+            if(task){
+              const dp=task.dueDate?task.dueDate.split("-").map(Number):null;
+              const cur=dp?new Date(dp[0],dp[1]-1,dp[2]):localToday();
+              const nd=new Date(cur.getTime()+d*864e5);
+              task.dueDate=dateStr(nd);
+              task.days=daysFromDate(task.dueDate);
+              saveTasks();renderDash();
+            }
+          });
+          snoozeWrap.appendChild(sb);
+        });
+        br.appendChild(snoozeWrap);
+      } else { br.appendChild(el("div",{})); }
+      // Edit button — switch to Email tab with task loaded for editing
+      const eb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✎ Edit"});
+      eb.addEventListener("click",()=>{
+        // Load this task into the Email tab edit mode
+        currentTaskId=t.id;
+        currentEmailSubject=t.title;
+        currentEmailId=t.emailId||null;
+        saved={type:t.type,effort:t.effort||"",importance:t.importance||null,dueDate:t.dueDate||"",delegateTo:t.delegateTo||"",waitingWho:t.waitingWho||"",notes:t.notes||""};
+        form={...saved};
+        mode="edit";
+        switchTab("Email");
+        renderEmail();
+      });
+      const cb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✓ Complete"});
+      cb.addEventListener("click",()=>{
+        // Use Graph API to clear categories and archive
+        if(t.emailId && window.k92Graph){
+          window.k92Graph.setCategories(t.emailId,[]).then(()=>{
+            return window.k92Graph.archiveMessage(t.emailId);
+          }).catch(e=>{
+            console.error("Graph complete failed:",e);
+            if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+              (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+              removeOutlookColour();
+            } else { addPending(t.emailId); }
+          });
+        } else if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+          (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+          removeOutlookColour();
+        } else if(t.emailId){ addPending(t.emailId); }
+        logCompletion(t);
+        if(!t.recurring){removeTask(t.id);}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        renderDash();
+      });
+      // Cancel button — remove categories, no archive
+      const xb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #F7C1C1",background:"#FCEBEB",color:"#791F1F",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✕"});
+      xb.addEventListener("click",()=>{
+        // Clear categories from ALL emails in conversation
+        if(t.conversationId && window.k92Graph){
+          window.k92Graph.clearConversationCategories(t.conversationId).catch(e=>console.error("Graph clear conversation failed:",e));
+        } else if(t.emailId && window.k92Graph){
+          window.k92Graph.setCategories(t.emailId,[]).catch(e=>console.error("Graph clear failed:",e));
+        }
+        if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+          (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+          clearOutlookColour();
+        }
+        if(!t.recurring){removeTask(t.id);}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        renderDash();
+      });
+      const rightBtns=el("div",{display:"flex",gap:"4px"});
+      if(!t.recurring){rightBtns.appendChild(eb);rightBtns.appendChild(xb);}
+      rightBtns.appendChild(cb);
+      br.appendChild(rightBtns);card.appendChild(br);
+      return card;
+    }
+
+    // ── Section header ────────────────────────────────────────
+    function secH(id,color,label,list,cardFn){
+      const wrap=document.createElement("div"),open=expSec===id;
+      const hdr=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"8px 10px",borderRadius:"10px",cursor:"pointer",border:"1px solid #e5e7eb",background:"#fff",marginBottom:"4px",boxShadow:"0 1px 2px rgba(0,0,0,0.03)"});
+      const left=el("div",{display:"flex",alignItems:"center",gap:"8px"});
+      left.appendChild(el("div",{width:"10px",height:"10px",borderRadius:"50%",background:color,flexShrink:"0",boxShadow:"0 0 0 2px rgba("+hexToRgb(color)+",0.2)"}));
+      left.appendChild(el("span",{fontSize:"11.5px",fontWeight:"600",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:label}));
+      hdr.appendChild(left);
+      const right=el("div",{display:"flex",alignItems:"center",gap:"7px"});
+      right.appendChild(el("span",{color:"#fff",borderRadius:"10px",padding:"2px 8px",fontSize:"10px",fontWeight:"700",background:color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:list.length}));
+      right.appendChild(el("span",{fontSize:"10px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",transition:"transform 0.2s",transform:open?"rotate(180deg)":"rotate(0deg)"},{textContent:"▼"}));
+      hdr.appendChild(right);
+      hdr.addEventListener("click",()=>{expSec=expSec===id?null:id;renderDash();});
+      wrap.appendChild(hdr);
+      if(open){const cards=el("div",{marginBottom:"4px"});list.forEach(t=>cards.appendChild((cardFn||tCard)(t)));wrap.appendChild(cards);}
+      return wrap;
+    }
+
+    function addST(dc,text,extra){
+      const row=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",margin:"14px 0 6px",padding:"0 2px"});
+      row.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".08em",textTransform:"uppercase",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:text}));
+      if(extra)row.appendChild(extra);
+      dc.appendChild(row);
+    }
+
+    function refreshDays(list){ list.forEach(t=>{ if(t.dueDate) t.days=daysFromDate(t.dueDate); }); }
+
+    function sortByDue(list){return list.sort((a,b)=>(a.days||0)-(b.days||0));}
+
+    function updateTabCounts(){
+      refreshDays(tasks);
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.dueDate===r.dueDate));
+      const allT=[...tasks,...rec];
+      const overdue=allT.filter(t=>t.days<0).length;
+      document.getElementById("tabDash").textContent="Dashboard"+(overdue?" \u26a0":"");
+      document.getElementById("tabTiles").textContent="Tiles"+(overdue?" \u26a0":"");
+    }
+
+    let dashFilters={task:true,discuss:true,waiting:true,delegated:true,overdueOnly:false};
+    let dashSearchQuery="";
+
+    function renderDashFilters(){
+      const fr=document.getElementById("dashFilterRow");fr.innerHTML="";
+      Object.keys(TL).forEach(type=>{
+        const on=dashFilters[type];const col=TC[type];
+        const btn=el("button",{padding:"2px 7px",borderRadius:"10px",fontSize:"9px",cursor:"pointer",fontWeight:"600",fontFamily:"'Segoe UI',Arial,sans-serif",border:"1.5px solid "+col,background:on?col:"#fff",color:on?"#fff":col},{textContent:TL[type]});
+        btn.addEventListener("click",()=>{dashFilters[type]=!dashFilters[type];renderDashFilters();renderDash();});
+        fr.appendChild(btn);
+      });
+      const odOn=dashFilters.overdueOnly;
+      const odBtn=el("button",{padding:"2px 7px",borderRadius:"10px",fontSize:"9px",cursor:"pointer",fontWeight:"600",fontFamily:"'Segoe UI',Arial,sans-serif",border:"1.5px solid #DC2626",background:odOn?"#DC2626":"#fff",color:odOn?"#fff":"#DC2626"},{textContent:"Overdue"});
+      odBtn.addEventListener("click",()=>{dashFilters.overdueOnly=!dashFilters.overdueOnly;renderDashFilters();renderDash();});
+      fr.appendChild(odBtn);
+    }
+
+    function renderDash(){
+      const dc=document.getElementById("dContent");dc.innerHTML="";
+      renderDashFilters();
+      refreshDays(tasks);
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.dueDate===r.dueDate));
+      let allTasks=[...tasks,...rec];
+      allTasks=allTasks.filter(t=>dashFilters[t.type]);
+      if(dashFilters.overdueOnly)allTasks=allTasks.filter(t=>t.days<0);
+      if(dashSearchQuery){const q=dashSearchQuery.toLowerCase();allTasks=allTasks.filter(t=>(t.title||"").toLowerCase().includes(q)||(t.sender||"").toLowerCase().includes(q)||(t.notes||"").toLowerCase().includes(q));}
+      const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting");
+      addST(dc,"MY ACTION ITEMS");
+      dc.appendChild(secH("high","#DC2626","High priority",sortByDue(mine.filter(t=>priLabel(t.days)==="High"))));
+      dc.appendChild(secH("medium","#D97706","Medium priority",sortByDue(mine.filter(t=>priLabel(t.days)==="Medium"))));
+      dc.appendChild(secH("low","#16A34A","Low priority",sortByDue(mine.filter(t=>priLabel(t.days)==="Low"))));
+      addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#CA8A04","Items to discuss",sortByDue(disc)));
+      addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",sortByDue(del)));dc.appendChild(secH("waiting","#7C3AED","Waiting",sortByDue(wait)));
+      // Recurring task editor button
+      const recBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"⚙ Recurring tasks"});
+      recBtn.addEventListener("click",()=>renderRecurringEditor(dc));
+      // Sync button to scan inbox for categorized emails
+      const syncBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"↻ Sync inbox"});
+      syncBtn.addEventListener("click",()=>{lastScanTime=0;loadFlaggedEmails(renderDash);});
+      const toolRow=el("div",{display:"flex",gap:"6px",marginTop:"14px",padding:"0 2px"});
+      toolRow.appendChild(syncBtn);toolRow.appendChild(recBtn);dc.appendChild(toolRow);
+      if(flagsLoading){dc.appendChild(el("div",{fontSize:"11px",color:"#667085",fontFamily:"'Segoe UI',Arial,sans-serif",padding:"6px 0"},{textContent:"Scanning inbox for categorized emails…"}));}
+      updateTabCounts();
+    }
+    renderDash();
+
+    // ── Recurring task editor ────────────────────────────────
+    function renderRecurringEditor(dc){
+      dc.innerHTML="";
+      const box=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
+      const hdr=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"12px",paddingBottom:"8px",borderBottom:"1px solid #eee"});
+      hdr.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Recurring Tasks"}));
+      const backBtn=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"← Back"});
+      backBtn.addEventListener("click",()=>renderDash());
+      hdr.appendChild(backBtn);
+      box.appendChild(hdr);
+
+      // Built-in recurring tasks (read-only list)
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Built-in"}));
+      const builtIn=["Monthly Cost Report — 8th","Monthly Cash Flow Model — 9th","Quarterly Instalment Calc — end of Q","Quarterly Instalment Payment — start of Q+1"];
+      builtIn.forEach(name=>{
+        const row=el("div",{fontSize:"11px",padding:"5px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:name});
+        box.appendChild(row);
+      });
+
+      // Custom recurring tasks
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Custom recurring"}));
+      const custom=loadCustomRecurring();
+      if(!custom.length){
+        box.appendChild(el("div",{fontSize:"11px",color:"#98a2b3",padding:"6px 0",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"No custom recurring tasks yet."}));
+      }
+      custom.forEach((cr,idx)=>{
+        const row=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 8px",background:"#f9fafb",borderRadius:"6px",marginBottom:"3px"});
+        let desc=cr.title+" — "+cr.freq;
+        if(cr.freq==="monthly"&&cr.days)desc+=" (day "+cr.days.join(", ")+")";
+        if(cr.freq==="quarterly")desc+=" (day "+cr.dayOfMonth+")";
+        if(cr.freq==="weekly")desc+=" ("+["Sun","Mon","Tue","Wed","Thu","Fri","Sat"][cr.dayOfWeek||0]+")";
+        row.appendChild(el("span",{fontSize:"11px",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1"},{textContent:desc}));
+        const delBtn=el("button",{fontSize:"9px",padding:"2px 6px",borderRadius:"4px",border:"1px solid #FCA5A5",background:"#FEE2E2",color:"#991b1b",cursor:"pointer",fontWeight:"600",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"✕"});
+        delBtn.addEventListener("click",()=>{
+          custom.splice(idx,1);saveCustomRecurring(custom);renderRecurringEditor(dc);
+        });
+        row.appendChild(delBtn);
+        box.appendChild(row);
+      });
+
+      // Add new recurring task form
+      box.appendChild(el("div",{fontSize:"10px",fontWeight:"700",color:"#667085",letterSpacing:".06em",textTransform:"uppercase",marginBottom:"6px",marginTop:"14px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Add new"}));
+      const form=el("div",{background:"#f9fafb",borderRadius:"8px",padding:"10px"});
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Title"}));
+      const titleInp=mkInput("text",null,"Task name");form.appendChild(titleInp);
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Frequency"}));
+      const freqSel=document.createElement("select");
+      Object.assign(freqSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+      [["monthly","Monthly"],["quarterly","Quarterly"],["weekly","Weekly"]].forEach(([v,l])=>{const o=document.createElement("option");o.value=v;o.textContent=l;freqSel.appendChild(o);});
+      form.appendChild(freqSel);
+      const detailDiv=el("div",{marginTop:"8px"});
+      function renderFreqDetail(){
+        detailDiv.innerHTML="";
+        if(freqSel.value==="monthly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day(s) of month (comma-separated)"}));
+          const dayInp=mkInput("text","recDays","e.g. 1, 15");detailDiv.appendChild(dayInp);
+        } else if(freqSel.value==="quarterly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of month"}));
+          const dayInp=mkInput("text","recDay","e.g. 15");detailDiv.appendChild(dayInp);
+        } else if(freqSel.value==="weekly"){
+          detailDiv.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Day of week"}));
+          const dowSel=document.createElement("select");
+          Object.assign(dowSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+          dowSel.id="recDow";
+          ["Sunday","Monday","Tuesday","Wednesday","Thursday","Friday","Saturday"].forEach((d,i)=>{const o=document.createElement("option");o.value=i;o.textContent=d;dowSel.appendChild(o);});
+          dowSel.value="1";
+          detailDiv.appendChild(dowSel);
+        }
+      }
+      freqSel.addEventListener("change",renderFreqDetail);
+      renderFreqDetail();
+      form.appendChild(detailDiv);
+      form.appendChild(el("div",{fontSize:"10px",fontWeight:"600",color:"#555",marginBottom:"3px",marginTop:"8px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Effort"}));
+      const effSel=document.createElement("select");
+      Object.assign(effSel.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif"});
+      ["Quick","Medium","Deep"].forEach(e=>{const o=document.createElement("option");o.value=e;o.textContent=e;effSel.appendChild(o);});
+      effSel.value="Medium";
+      form.appendChild(effSel);
+      const addBtn=el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add recurring task"});
+      addBtn.addEventListener("click",()=>{
+        const title=titleInp.value.trim();
+        if(!title)return;
+        const freq=freqSel.value;
+        const entry={title,freq,effort:effSel.value};
+        if(freq==="monthly"){
+          const daysStr=(document.getElementById("recDays")||{}).value||"1";
+          entry.days=daysStr.split(",").map(s=>parseInt(s.trim())).filter(n=>n>=1&&n<=31);
+          if(!entry.days.length)entry.days=[1];
+        } else if(freq==="quarterly"){
+          entry.dayOfMonth=parseInt((document.getElementById("recDay")||{}).value)||1;
+        } else if(freq==="weekly"){
+          entry.dayOfWeek=parseInt((document.getElementById("recDow")||{}).value)||1;
+        }
+        custom.push(entry);saveCustomRecurring(custom);renderRecurringEditor(dc);
+      });
+      form.appendChild(addBtn);
+      box.appendChild(form);
+      dc.appendChild(box);
+    }
+
+    // ── Tiles tab (Today's Plan) ─────────────────────────────
+    const TILES_ALGO_VERSION="4";
+    const ZONES=["now","next","later","nottoday"];
+    const ZONE_META={
+      now:{label:"Do Now",color:"#DC2626",bg:"#FEF2F2",border:"#FCA5A5",icon:"🔴",max:2,desc:"Your #1 focus right now"},
+      next:{label:"Do Next",color:"#D97706",bg:"#FFFBEB",border:"#FCD34D",icon:"🟡",max:3,desc:"Up next when you finish"},
+      later:{label:"Later Today",color:"#0078D4",bg:"#EFF6FF",border:"#93C5FD",icon:"🔵",max:null,desc:"Get to these if time permits"},
+      nottoday:{label:"Not Today",color:"#6B7280",bg:"#F9FAFB",border:"#D1D5DB",icon:"⚪",max:null,desc:"Parked — revisit tomorrow"}
+    };
+
+    function loadTilesDate(){try{return localStorage.getItem("k92tilesDate")||"";}catch(e){return"";}}
+    function saveTilesDate(d){try{localStorage.setItem("k92tilesDate",d);}catch(e){}}
+
+    function autoAssignZone(t){
+      // Score: higher = more urgent/important → Do Now
+      const imp=t.importance||3;
+      const urgency=t.days<=0?10:t.days<=1?8:t.days<=2?6:t.days<=5?4:t.days<=7?3:1;
+      return imp*2+urgency;
+    }
+
+    function resetTilesIfNewDay(){
+      const today=dateStr(localToday());
+      const ver="v5";
+      if(loadTilesDate()!==today+ver){
+        tasks.forEach(t=>{delete t.zone;});
+        saveTasks();
+        saveTilesDate(today+ver);
+      }
+    }
+
+    function assignDefaultZones(){
+      refreshDays(tasks);
+      const rec=getRecurringTasks().filter(r=>!tasks.some(t=>t.title===r.title&&t.dueDate===r.dueDate));
+      const allTasks=[...tasks,...rec];
+      // Only assign to tasks without a zone
+      const unassigned=allTasks.filter(t=>!t.zone);
+      if(!unassigned.length)return allTasks;
+      // Score and sort
+      unassigned.sort((a,b)=>autoAssignZone(b)-autoAssignZone(a));
+      // Fill zones respecting max limits
+      let nowCount=allTasks.filter(t=>t.zone==="now").length;
+      let nextCount=allTasks.filter(t=>t.zone==="next").length;
+      unassigned.forEach(t=>{
+        const actionable=t.type==="task"||t.type==="discuss";
+        if(actionable&&nowCount<2&&(t.days<=3||(t.importance>=4&&t.days<=7))){t.zone="now";nowCount++;}
+        else if(actionable&&nextCount<3&&(t.days<=7||t.importance>=4)){t.zone="next";nextCount++;}
+        else if(t.days>=0&&t.days<=7){t.zone="later";}
+        else{t.zone="nottoday";}
+      });
+      saveTasks();
+      return allTasks;
+    }
+
+    function tileSizeStyle(effort){
+      if(effort==="Deep")return{minHeight:"80px",padding:"12px"};
+      if(effort==="Quick")return{minHeight:"44px",padding:"8px 10px"};
+      return{minHeight:"58px",padding:"10px 11px"}; // Medium/default
+    }
+
+    function renderTiles(){
+      resetTilesIfNewDay();
+      const tc=document.getElementById("tilesContent");tc.innerHTML="";
+      refreshDays(tasks);
+      let allTasks=assignDefaultZones();
+      // Filter out tasks completed today
+      const comp=loadCompletions();const todayStr=dateStr(localToday());
+      const todayComp=comp.filter(c=>c.date===todayStr);
+      allTasks=allTasks.filter(t=>!todayComp.some(c=>c.title===t.title));
+
+      // Header
+      const hdr=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"});
+      hdr.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"Today's Plan"}));
+      const resetBtn=el("button",{fontSize:"9px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"↻ Reset"});
+      resetBtn.addEventListener("click",()=>{
+        tasks.forEach(t=>{delete t.zone;});saveTasks();renderTiles();
+      });
+      hdr.appendChild(resetBtn);
+      tc.appendChild(hdr);
+
+      // Render each zone
+      ZONES.forEach(zoneId=>{
+        const zm=ZONE_META[zoneId];
+        const zoneTasks=allTasks.filter(t=>t.zone===zoneId).sort((a,b)=>autoAssignZone(b)-autoAssignZone(a));
+
+        // Zone header
+        const zoneWrap=el("div",{marginBottom:"10px"});
+        const zHdr=el("div",{display:"flex",alignItems:"center",justifyContent:"space-between",padding:"7px 10px",borderRadius:"8px",background:zm.bg,border:"1px solid "+zm.border,marginBottom:"4px"});
+        const zLeft=el("div",{display:"flex",alignItems:"center",gap:"6px"});
+        zLeft.appendChild(el("span",{fontSize:"11px"},{textContent:zm.icon}));
+        zLeft.appendChild(el("span",{fontSize:"11.5px",fontWeight:"700",color:zm.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zm.label}));
+        if(zm.max)zLeft.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"(max "+zm.max+")"}));
+        zHdr.appendChild(zLeft);
+        zHdr.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:zm.color,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zoneTasks.length}));
+        zoneWrap.appendChild(zHdr);
+
+        // Zone description if empty
+        if(!zoneTasks.length){
+          zoneWrap.appendChild(el("div",{fontSize:"10px",color:"#98a2b3",padding:"8px 10px",textAlign:"center",fontStyle:"italic",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:zm.desc}));
+        }
+
+        // Task tiles
+        zoneTasks.forEach(t=>{
+          const sizeS=tileSizeStyle(t.effort);
+          const c=priColor(t.days);
+          const tile=el("div",{...sizeS,background:"#fff",border:"1px solid #e5e7eb",borderRadius:"8px",marginBottom:"3px",borderLeft:"3px solid "+c,boxShadow:"0 1px 2px rgba(0,0,0,0.04)",display:"flex",flexDirection:"column",justifyContent:"space-between"});
+
+          // Top row: title + sender
+          const topRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",gap:"4px"});
+          topRow.appendChild(el("div",{fontSize:"11px",fontWeight:"600",color:"#1a1a1a",lineHeight:"1.3",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"},{textContent:t.title}));
+          if(t.sender)topRow.appendChild(el("span",{fontSize:"8px",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",whiteSpace:"nowrap",flexShrink:"0",fontWeight:"600"},{textContent:fmtSender(t.sender)}));
+          tile.appendChild(topRow);
+
+          // Bottom row: meta + move buttons
+          const botRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center",marginTop:"4px"});
+          const metaSpan=el("div",{display:"flex",gap:"4px",alignItems:"center",flexWrap:"wrap"});
+          const dl=t.days<0?Math.abs(t.days)+"d overdue":t.days===0?"today":t.days+"d";
+          metaSpan.appendChild(el("span",{fontSize:"9px",fontWeight:"700",color:c,fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:dl}));
+          if(t.importance)metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"P"+t.importance}));
+          const typeCol=TC[t.type]||"#666";
+          metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:typeCol,color:"#fff",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:TL[t.type]||t.type}));
+          if(t.effort)metaSpan.appendChild(el("span",{fontSize:"8px",padding:"1px 4px",borderRadius:"8px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:t.effort}));
+          botRow.appendChild(metaSpan);
+
+          // Complete button
+          const tileCb=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"✓"});
+          tileCb.title="Complete";
+          tileCb.addEventListener("click",(ev)=>{
+            ev.stopPropagation();
+            if(t.emailId && window.k92Graph){
+              window.k92Graph.setCategories(t.emailId,[]).then(()=>{
+                return window.k92Graph.archiveMessage(t.emailId);
+              }).catch(e=>console.error("Graph complete failed:",e));
+            }
+            logCompletion(t);
+            if(!t.recurring){removeTask(t.id);}
+            renderTiles();renderDash();
+          });
+
+          // Move buttons
+          const moveWrap=el("div",{display:"flex",gap:"2px"});
+          moveWrap.appendChild(tileCb);
+          const zi=ZONES.indexOf(zoneId);
+          if(zi>0){
+            const upBtn=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▲"});
+            upBtn.title="Move to "+ZONE_META[ZONES[zi-1]].label;
+            upBtn.addEventListener("click",()=>{
+              // Check max of target zone
+              const targetZone=ZONES[zi-1];
+              const targetMax=ZONE_META[targetZone].max;
+              const targetCount=allTasks.filter(x=>x.zone===targetZone).length;
+              if(targetMax&&targetCount>=targetMax){
+                // Swap: move the lowest-scored task in target zone down
+                const targetTasks=allTasks.filter(x=>x.zone===targetZone).sort((a,b)=>autoAssignZone(a)-autoAssignZone(b));
+                if(targetTasks.length){
+                  const bumped=targetTasks[0];
+                  const real=tasks.find(x=>x.id===bumped.id);
+                  if(real)real.zone=zoneId;
+                }
+              }
+              const real=tasks.find(x=>x.id===t.id);
+              if(real)real.zone=targetZone;
+              saveTasks();renderTiles();
+            });
+            moveWrap.appendChild(upBtn);
+          }
+          if(zi<ZONES.length-1){
+            const dnBtn=el("button",{fontSize:"9px",padding:"1px 5px",borderRadius:"4px",border:"1px solid #e5e7eb",background:"#f9fafb",color:"#475467",cursor:"pointer",fontWeight:"700",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1"},{textContent:"▼"});
+            dnBtn.title="Move to "+ZONE_META[ZONES[zi+1]].label;
+            dnBtn.addEventListener("click",()=>{
+              const real=tasks.find(x=>x.id===t.id);
+              if(real)real.zone=ZONES[zi+1];
+              saveTasks();renderTiles();
+            });
+            moveWrap.appendChild(dnBtn);
+          }
+          botRow.appendChild(moveWrap);
+          tile.appendChild(botRow);
+
+          // Hover effect
+          tile.addEventListener("mouseenter",()=>{tile.style.background="#fafbfc";tile.style.boxShadow="0 2px 6px rgba(0,0,0,0.08)";});
+          tile.addEventListener("mouseleave",()=>{tile.style.background="#fff";tile.style.boxShadow="0 1px 2px rgba(0,0,0,0.04)";});
+          // Click to open email
+          tile.style.cursor="pointer";
+          tile.addEventListener("click",(ev)=>{
+            if(ev.target.tagName==="BUTTON")return;
+            if(t.emailId){try{Office.context.mailbox.displayMessageForm(t.emailId);}catch(e){}}
+          });
+
+          zoneWrap.appendChild(tile);
+        });
+
+        tc.appendChild(zoneWrap);
+      });
+
+      // Summary footer
+      const nowTasks=allTasks.filter(t=>t.zone==="now");
+      const nextTasks=allTasks.filter(t=>t.zone==="next");
+      const totalFocus=nowTasks.length+nextTasks.length;
+      const effortMap={Quick:15,Medium:45,Deep:120};
+      const totalMins=[...nowTasks,...nextTasks].reduce((s,t)=>s+(effortMap[t.effort]||30),0);
+      const hrs=Math.floor(totalMins/60);
+      const mins=totalMins%60;
+      const timeStr=hrs?hrs+"h"+(mins?" "+mins+"m":""):mins+"m";
+      const footer=el("div",{fontSize:"10px",color:"#667085",padding:"8px 10px",textAlign:"center",fontFamily:"'Segoe UI',Arial,sans-serif",borderTop:"1px solid #e5e7eb",marginTop:"6px"});
+      footer.textContent=totalFocus+" focused task"+(totalFocus!==1?"s":"")+" · est. "+timeStr+" · ▲▼ to reprioritize";
+      tc.appendChild(footer);
+    }
+
+    // ── Email tab ─────────────────────────────────────────────
+    let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null;
+
+    function removeOutlookColour(){
+      if(!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate","To be Archived"],r=>{});
+    }
+    // Remove categories without adding pink (for cancel/undo)
+    function clearOutlookColour(){
+      if(!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate"],r=>{});
+    }
+
+    function applyOutlookColour(task){
+      const days=task.days;let colour;
+      if(task.type==="task")colour=days<=2?"High":days<=7?"Med":"Low";
+      else if(task.type==="discuss")colour="Discuss";
+      else if(task.type==="waiting")colour="Waiting";
+      else if(task.type==="delegated")colour="Delegate";
+      if(!colour||!Office.context.mailbox.item)return;
+      Office.context.mailbox.item.categories.addAsync([colour],result=>{});
+      if(task.emailId && window.k92Graph){
+        window.k92Graph.setCategories(task.emailId,[colour]).catch(e=>console.error("Graph category fallback failed:",e));
+      }
+    }
+
+    function addOrReplace(taskObj){
+      // Preserve sender from previous version of this task
+      const prevTask=currentTaskId!==null?tasks.find(t=>t.id===currentTaskId):null;
+      const prevSender=prevTask?prevTask.sender:"";
+      if(currentTaskId!==null)removeTask(currentTaskId);
+      taskObj.id=nid++;taskObj.emailId=currentEmailId;
+      try{ taskObj.conversationId=Office.context.mailbox.item.conversationId||null; }catch(e){ taskObj.conversationId=null; }
+      // Only capture sender from selected email if it matches AND no previous sender
+      if(prevSender){taskObj.sender=prevSender;}
+      else{try{const item=Office.context.mailbox.item;if(item&&item.itemId===currentEmailId){const f=item.from;taskObj.sender=f&&f.displayName?f.displayName:"";}else{taskObj.sender="";}}catch(e){taskObj.sender="";}}
+      tasks.push(taskObj);currentTaskId=taskObj.id;
+      saveTasks();applyOutlookColour(taskObj);
+    }
+
+    function vRow(lbl,val,card){
+      const row=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});
+      row.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:lbl}));
+      const vs=el("span",{fontSize:"11px",color:"#222",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});
+      vs.textContent=val||"—";row.appendChild(vs);card.appendChild(row);
+    }
+
+    function renderNew(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      es.appendChild(mkLbl("TASK TYPE"));
+      // Keyboard hint
+      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task  2=Discuss  3=Waiting  4=Delegate  5=Archive"}));
+      const fieldsDiv=el("div",{});
+      const addBtn=el("button",{width:"100%",padding:"10px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",display:"none",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add to tasks"});
+      addBtn.classList.add("kb-group");
+      const cancelBtn=mkBtn("Cancel","#fff","#475467","1px solid #d0d5dd");
+      cancelBtn.style.display="none";
+      cancelBtn.addEventListener("click",()=>{
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        mode="new";renderEmail();
+      });
+      const tg=mkTypeGrid(form.type,t=>{form.type=t;buildFields(t,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";setTimeout(()=>{const fd=document.getElementById("fDate");if(fd)fd.focus();},50);});
+      tg.style.marginTop="4px";es.appendChild(tg);es.appendChild(fieldsDiv);
+      if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";}
+      addBtn.addEventListener("click",()=>{
+        if(!form.type){setStatus("Please select a task type.",3000);return;}
+        if(!form.dueDate){setStatus("Please set a due date.",3000);return;}
+        saved={...form};
+        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
+        mode="view";renderEmail();
+      });
+      es.appendChild(addBtn);
+      es.appendChild(cancelBtn);
+      // Archive button — archives the email without creating a task
+      const archBtn=el("button",{width:"100%",padding:"8px",borderRadius:"8px",border:"1px solid #d0d5dd",background:"#f9fafb",color:"#475467",fontWeight:"600",fontSize:"11px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"14px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"Archive"});
+      archBtn.addEventListener("click",()=>{
+        if(currentEmailId && window.k92Graph){
+          window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
+            return window.k92Graph.archiveMessage(currentEmailId);
+          }).then(()=>{setStatus("Email archived.",3000);}).catch(e=>console.error("Archive failed:",e));
+        }
+      });
+      es.appendChild(archBtn);
+    }
+
+    function renderView(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      const t=saved.type,bg=TC[t]||"#0078D4";
+      const card=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"12px",marginBottom:"10px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
+      const typeRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});
+      typeRow.appendChild(el("span",{fontSize:"11px",color:"#888",fontWeight:"500",minWidth:"65px",fontFamily:"Arial,sans-serif"},{textContent:"Type"}));
+      const vs=el("span",{fontSize:"11px",textAlign:"right",flex:"1",marginLeft:"8px",fontFamily:"Arial,sans-serif"});
+      vs.appendChild(el("span",{display:"inline-block",padding:"3px 8px",borderRadius:"6px",fontSize:"11px",fontWeight:"700",background:bg,color:"#fff",fontFamily:"Arial,sans-serif"},{textContent:TL[t]}));
+      typeRow.appendChild(vs);card.appendChild(typeRow);
+      if(t==="waiting"){vRow("Expected",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Waiting on",saved.waitingWho||"—",card);if(saved.notes)vRow("Details",saved.notes,card);}
+      else if(t==="delegated"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Delegated to",saved.delegateTo||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      else if(t==="discuss"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      else{vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.effort)vRow("Effort",saved.effort,card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      if(card.lastChild&&card.lastChild.style)card.lastChild.style.borderBottom="none";
+      es.appendChild(card);
+      // Keyboard hint for view mode
+      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"6px"},{textContent:"Shortcut: 1=Edit  2=Complete & archive  3=Cancel"}));
+      const editBtn=mkBtn("Edit task","#fff","#333","1px solid #ccc");
+      editBtn.addEventListener("click",()=>{form={...saved};mode="edit";renderEmail();});es.appendChild(editBtn);
+      const cmpBtn=mkBtn("Mark complete & archive","#E1F5EE","#085041","1px solid #9FE1CB");
+      cmpBtn.addEventListener("click",()=>{
+        removeOutlookColour();
+        if(currentEmailId && window.k92Graph){
+          setStatus("Archiving...");
+          window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
+            return window.k92Graph.archiveMessage(currentEmailId);
+          }).then(()=>{
+            setStatus("Archived.",3000);
+          }).catch(e=>{
+            console.error("Archive failed:",e);
+            setStatus("Completed — archive failed.",4000);
+          });
+        }
+        if(currentTaskId!==null){
+          const task=tasks.find(x=>x.id===currentTaskId);
+          if(task)logCompletion(task);
+          removeTask(currentTaskId);
+        }
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        saved={};mode="new";renderEmail();renderDash();
+      });es.appendChild(cmpBtn);
+      const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
+      canBtn.addEventListener("click",()=>{
+        const task=currentTaskId!==null?tasks.find(t=>t.id===currentTaskId):null;
+        // Clear categories from ALL emails in the conversation via Graph
+        if(task && task.conversationId && window.k92Graph){
+          window.k92Graph.clearConversationCategories(task.conversationId).catch(e=>console.error("Graph clear conversation failed:",e));
+        } else if(currentEmailId && window.k92Graph){
+          window.k92Graph.setCategories(currentEmailId,[]).catch(e=>console.error("Graph clear failed:",e));
+        }
+        clearOutlookColour();
+        if(currentTaskId!==null)removeTask(currentTaskId);
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};mode="new";renderEmail();renderDash();
+      });es.appendChild(canBtn);
+    }
+
+    function renderEdit(){
+      const es=document.getElementById("eState");es.innerHTML="";
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      es.appendChild(mkLbl("TASK TYPE"));
+      const tg=mkTypeGrid(form.type,null);tg.style.marginTop="4px";tg.style.pointerEvents="none";tg.style.opacity="0.4";es.appendChild(tg);
+      es.appendChild(el("div",{fontSize:"10px",color:"#aaa",margin:"2px 0 8px",fontStyle:"italic",fontFamily:"Arial,sans-serif"},{textContent:"Type locked — cancel task to change"}));
+      const fieldsDiv=el("div",{});es.appendChild(fieldsDiv);buildFields(form.type,form,fieldsDiv);
+      const saveBtn=mkBtn("Save changes","#0078D4","#fff","none");
+      saveBtn.addEventListener("click",()=>{saved={...form};addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});mode="view";renderEmail();});
+      es.appendChild(saveBtn);
+      const discardBtn=mkBtn("Discard changes","#fff","#333","1px solid #ccc");
+      discardBtn.addEventListener("click",()=>{form={...saved};mode="view";renderEmail();});es.appendChild(discardBtn);
+    }
+
+    function renderEmail(){
+      if(mode==="new")renderNew();
+      else if(mode==="view")renderView();
+      else renderEdit();
+    }
+    renderEmail();
+
+    // ── Dashboard manual task ─────────────────────────────────
+    let dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    function renderManualForm(){
+      const mf=document.getElementById("mForm");mf.innerHTML="";
+      const box=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
+      box.appendChild(el("div",{fontSize:"13px",fontWeight:"700",color:"#1a1a1a",marginBottom:"12px",paddingBottom:"8px",borderBottom:"1px solid #eee",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"New manual task"}));
+      box.appendChild(mkLbl("TITLE"));
+      const titleInp=mkInput("text","mTitle","What needs to be done?");box.appendChild(titleInp);
+      box.appendChild(mkLbl("TASK TYPE"));
+      const dynDiv=el("div",{});
+      const tg=mkTypeGrid(dType,t=>{dType=t;dForm.type=t;buildFields(t,dForm,dynDiv);});
+      tg.style.marginTop="4px";box.appendChild(tg);box.appendChild(dynDiv);
+      const btnRow=el("div",{display:"flex",gap:"5px",marginTop:"8px"});
+      const addB=el("button",{flex:"1",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add task"});
+      addB.addEventListener("click",()=>{
+        const title=titleInp.value.trim()||"Manual task";
+        tasks.push({id:nid++,title,days:daysFromDate(dForm.dueDate),dueDate:dForm.dueDate||"",type:dType||"task",effort:dForm.effort||"",importance:dForm.importance||null,who:dForm.waitingWho||dForm.delegateTo||"",delegateTo:dForm.delegateTo||"",waitingWho:dForm.waitingWho||"",notes:dForm.notes||""});
+        saveTasks();
+        document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";
+        titleInp.value="";dType="";dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};renderDash();
+      });
+      const canB=el("button",{padding:"0 12px",height:"36px",borderRadius:"8px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"Cancel"});
+      canB.addEventListener("click",()=>{document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";});
+      btnRow.appendChild(addB);btnRow.appendChild(canB);box.appendChild(btnRow);mf.appendChild(box);
+    }
+
+    document.getElementById("newTaskBtn").addEventListener("click",()=>{
+      document.getElementById("mForm").style.display="block";document.getElementById("newTaskBtn").style.display="none";renderManualForm();
+    });
+
+    // ── Search wiring ────────────────────────────────────────
+    document.getElementById("dashSearch").addEventListener("input",e=>{dashSearchQuery=e.target.value;renderDash();});
+
+    // ── Tab switching ─────────────────────────────────────────
+    function switchTab(active){
+      ["Email","Dash","Tiles"].forEach(n=>{
+        document.getElementById("p"+n).classList.toggle("active",n===active);
+        document.getElementById("tab"+n).classList.toggle("on",n===active);
+      });
+    }
+    document.getElementById("tabEmail").addEventListener("click",()=>switchTab("Email"));
+    document.getElementById("tabDash").addEventListener("click",()=>{switchTab("Dash");loadFlaggedEmails(renderDash);});
+    document.getElementById("tabTiles").addEventListener("click",()=>{switchTab("Tiles");renderTiles();});
+
+    // ── Keyboard shortcuts ────────────────────────────────────
+    const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated"};
+    document.addEventListener("keydown",e=>{
+      // Alt+1/2/3 = tab switching (always active)
+      if(e.altKey&&e.key==="1"){e.preventDefault();switchTab("Email");return;}
+      if(e.altKey&&e.key==="2"){e.preventDefault();switchTab("Dash");loadFlaggedEmails(renderDash);return;}
+      if(e.altKey&&e.key==="3"){e.preventDefault();switchTab("Tiles");renderTiles();return;}
+      // Skip if user is typing in an input/textarea
+      const tag=document.activeElement&&document.activeElement.tagName;
+      if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
+      const emailTab=document.getElementById("pEmail");
+      if(!emailTab||!emailTab.classList.contains("active"))return;
+      // Key 5 = Archive (in new mode only)
+      if(e.key==="5"&&mode==="new"){
+        e.preventDefault();
+        if(currentEmailId && window.k92Graph){
+          window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
+            return window.k92Graph.archiveMessage(currentEmailId);
+          }).then(()=>{setStatus("Email archived.",3000);}).catch(e=>console.error("Archive failed:",e));
+        }
+        return;
+      }
+      const typeKey=typeKeys[e.key];
+      if(typeKey){
+        if(mode==="view"){
+          // View mode: 1=Edit, 2=Complete & archive, 3=Cancel
+          const es=document.getElementById("eState");
+          if(!es)return;
+          const btns=es.querySelectorAll("button");
+          const idx={"1":0,"2":1,"3":2}[e.key];
+          if(idx!==undefined&&btns[idx]){e.preventDefault();btns[idx].click();}
+          return;
+        }
+        if(mode!=="new"&&mode!=="edit")return;
+        // New/edit mode: 1=Task, 2=Discuss, 3=Waiting, 4=Delegate
+        const btn=emailTab.querySelector('button[data-type="'+typeKey+'"]');
+        if(btn){btn.click();e.preventDefault();setTimeout(()=>{const fd=document.getElementById("fDate");if(fd)fd.focus();},80);}
+      }
+    });
+
+    // ── Office init ───────────────────────────────────────────
+    Office.onReady((info)=>{
+      if(info.host===Office.HostType.Outlook){
+        // Initialize Graph API (MSAL) — non-blocking
+        if(window.k92Graph){window.k92Graph.init().catch(e=>console.warn("MSAL init deferred:",e));}
+        Office.context.mailbox.addHandlerAsync(Office.EventType.ItemChanged,onItemChanged);
+        onItemChanged();
+        loadFlaggedEmails(renderDash);
+      }
+    });
+
+    function onItemChanged(){
+      const item=Office.context.mailbox.item;
+      if(!item){
+        currentEmailSubject="Select an email to begin";currentEmailId=null;
+        document.getElementById("eSnip").textContent=currentEmailSubject;
+        mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};currentTaskId=null;
+        renderEmail();return;
+      }
+      currentEmailSubject=item.subject||"No subject";
+      currentEmailId=item.itemId;
+      document.getElementById("eSnip").textContent=currentEmailSubject;
+      if(isPending(currentEmailId)){
+        Office.context.mailbox.item.categories.removeAsync(["High","Med","Low","Discuss","Waiting","Delegate","To be Archived"],r=>{
+          removePending(currentEmailId);
+        });
+      }
+      const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
+        tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId) ||
+        tasks.find(t=>t.title && t.title===currentEmailSubject);
+      if(existingTask){
+        currentTaskId=existingTask.id;
+        saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",notes:existingTask.notes||""};
+        mode="view";
+        // If matched via conversation (not exact email), apply colour to current email too
+        if(existingTask.emailId!==currentEmailId){ applyOutlookColour(existingTask); }
+      } else {
+        currentTaskId=null;mode="new";
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};
+        // Auto-detect manually applied Outlook categories and create a task
+        // Capture state at call time to prevent race condition during rapid email switching
+        const snapEmailId=currentEmailId;
+        const snapSubject=currentEmailSubject;
+        Office.context.mailbox.item.categories.getAsync(catResult=>{
+          // Bail if user has already switched to a different email
+          if(currentEmailId!==snapEmailId){return;}
+          if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
+          const catNames=catResult.value.map(c=>c.displayName);
+          const catMap={"High":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
+          const found=catNames.find(n=>catMap[n]);
+          if(!found){renderEmail();return;}
+          const type=catMap[found];
+          const defaultDays=found==="High"?2:found==="Med"?7:14;
+          const due=new Date(localToday().getTime()+defaultDays*864e5);
+          const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
+          const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:found==="High"?1:found==="Med"?2:3,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:snapEmailId};
+          try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
+          try{const f=Office.context.mailbox.item.from;autoTask.sender=f&&f.displayName?f.displayName:"";}catch(e){autoTask.sender="";}
+          tasks.push(autoTask);saveTasks();
+          currentTaskId=autoTask.id;
+          saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",notes:""};
+          mode="view";renderEmail();renderDash();
+          setStatus("Task auto-created from email category.",3000);
+          return;
+        });
+        return; // wait for async category check
+      }
+      renderEmail();
+    }
+  </script>
+</body>
+</html>
