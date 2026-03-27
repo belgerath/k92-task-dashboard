@@ -377,8 +377,7 @@
         deduped.forEach(m=>{
           const existing=tasks.find(t=>
             (t.conversationId && m.conversationId && t.conversationId===m.conversationId) ||
-            (t.emailId && t.emailId===m.id) ||
-            (t.title && m.subject && t.title===m.subject)
+            (t.emailId && t.emailId===m.id)
           );
           if(existing){
             // Backfill conversationId, always update sender from scan data
