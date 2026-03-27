@@ -8,7 +8,11 @@
       "Bash(where magick:*)",
       "Bash(where convert:*)",
       "Bash(pip show:*)",
-      "Bash(pip install:*)"
+      "Bash(pip install:*)",
+      "Bash(rm -f *.js *.html *.txt *.map)",
+      "Bash(cp /tmp/k92dist/* .)",
+      "Bash(cp -r /tmp/k92dist/assets/* assets/)",
+      "Bash(rm -rf dist/)"
     ]
   }
 }
