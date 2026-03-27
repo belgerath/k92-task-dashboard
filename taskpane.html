@@ -116,10 +116,10 @@
     function fmtD(d) { if(!d)return"—"; const p=d.split("-"); if(p.length!==3)return d; return parseInt(p[2])+" "+["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(p[1])-1]+" "+p[0]; }
     function dateStr(dt) { return dt.getFullYear()+"-"+String(dt.getMonth()+1).padStart(2,"0")+"-"+String(dt.getDate()).padStart(2,"0"); }
     // Priority: weighted blend of urgency (days) + importance (1-5)
-    // High = importance >= 4 OR due within 2 days OR overdue
-    // Medium = importance >= 3 OR due within 7 days
+    // High = importance >= 4 OR due within 2 days
+    // Medium = due within 7 days (P3 is neutral, no elevation)
     // Low = everything else
-    function priLevel(d,imp){const i=imp||3;if(i>=4||d<=2)return"High";if(i>=3||d<=7)return"Medium";return"Low";}
+    function priLevel(d,imp){if(imp>=4||d<=2)return"High";if(d<=7)return"Medium";return"Low";}
     const priData={High:{l:"High",c:"#DC2626",lbl:"red"},Medium:{l:"Medium",c:"#EA580C",lbl:"orange"},Low:{l:"Low",c:"#16A34A",lbl:"green"}};
     const pri = (d,imp) => priData[priLevel(d,imp)];
 
