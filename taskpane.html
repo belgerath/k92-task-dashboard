@@ -869,10 +869,20 @@
             if(t.emailId && window.k92Graph){
               window.k92Graph.setCategories(t.emailId,[]).then(()=>{
                 return window.k92Graph.archiveMessage(t.emailId);
-              }).catch(e=>console.error("Graph complete failed:",e));
-            }
+              }).catch(e=>{
+                console.error("Graph complete failed:",e);
+                if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+                  (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+                  removeOutlookColour();
+                } else { addPending(t.emailId); }
+              });
+            } else if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
+              (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
+              removeOutlookColour();
+            } else if(t.emailId){ addPending(t.emailId); }
             logCompletion(t);
             if(!t.recurring){removeTask(t.id);}
+            if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
             renderTiles();renderDash();
           });
 
