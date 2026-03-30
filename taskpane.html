@@ -55,6 +55,8 @@
 
   <script>
     const TC = { task:"#0078D4", discuss:"#16A34A", waiting:"#6B7280", delegated:"#6B7280" };
+    const TA = { task:"#EA580C", discuss:"#16A34A", waiting:"#16A34A", delegated:"#16A34A" };
+    const TB = { task:"rgba(234,88,12,0.06)", discuss:"rgba(22,163,74,0.06)", waiting:"rgba(22,163,74,0.06)", delegated:"rgba(22,163,74,0.06)" };
     const TL = { task:"Task", discuss:"Discuss", waiting:"Waiting", delegated:"Delegate" };
     const EC = "#185FA5";
 
@@ -139,7 +141,7 @@
     function mkTextarea(id,placeholder,rows) { const t=document.createElement("textarea"); Object.assign(t.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",resize:"none",display:"block"}); t.rows=rows||2; if(id)t.id=id; if(placeholder)t.placeholder=placeholder; return t; }
     function mkPill(text,bg,color,border) { return el("div",{background:bg,color:color,border:"1px solid "+border,borderRadius:"8px",padding:"7px 10px",fontSize:"11px",marginTop:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:text}); }
     function mkBtn(text,bg,color,border) { return el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:border||"none",background:bg,color:color,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",display:"block",boxShadow:"0 1px 2px rgba(0,0,0,0.06)"},{textContent:text}); }
-    function sType(b,on) { const c=TC[b.dataset.type]||"#0078D4"; Object.assign(b.style,{height:"40px",width:"100%",fontSize:"13px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"10px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 14px",textAlign:"left",borderLeft:on?"4px solid "+c:"4px solid #d0d5dd",borderTop:"1px solid "+(on?c:"#e5e7eb"),borderRight:"1px solid "+(on?c:"#e5e7eb"),borderBottom:"1px solid "+(on?c:"#e5e7eb"),background:on?c:"#fff",color:on?"#fff":"#374151",fontWeight:on?"700":"600",boxShadow:on?"0 2px 8px rgba(0,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.06)",transition:"all 0.15s ease",letterSpacing:"0.3px"}); }
+    function sType(b,on) { const t=b.dataset.type; const c=TC[t]||"#0078D4"; const a=TA[t]||"#d0d5dd"; const bg=TB[t]||"#fff"; Object.assign(b.style,{height:"40px",width:"100%",fontSize:"13px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"10px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 14px",textAlign:"left",borderLeft:on?"4px solid "+c:"4px solid "+a,borderTop:"1px solid "+(on?c:"#e5e7eb"),borderRight:"1px solid "+(on?c:"#e5e7eb"),borderBottom:"1px solid "+(on?c:"#e5e7eb"),background:on?c:bg,color:on?"#fff":"#374151",fontWeight:on?"700":"600",boxShadow:on?"0 2px 8px rgba(0,0,0,0.15)":"0 1px 3px rgba(0,0,0,0.06)",transition:"all 0.15s ease",letterSpacing:"0.3px"}); }
     function sEff(b,on) { Object.assign(b.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 4px",border:on?"2px solid "+EC:"1.5px solid #d0d5dd",background:on?EC:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"none"}); }
     function sImp(b,on) {
       const val=parseInt(b.dataset.imp);
