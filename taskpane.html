@@ -960,7 +960,7 @@
 
     // ── Email tab ─────────────────────────────────────────────
     let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
-    let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null;
+    let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null,currentEmailPreview="";
 
     function removeOutlookColour(){
       if(!Office.context.mailbox.item)return;
@@ -1006,9 +1006,16 @@
       vs.textContent=val||"—";row.appendChild(vs);card.appendChild(row);
     }
 
+    function mkPreview(container){
+      if(!currentEmailPreview)return;
+      const p=el("div",{fontSize:"11px",color:"#64748b",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f8fafc",borderRadius:"8px",borderLeft:"3px solid #cbd5e1",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",maxHeight:"80px",overflow:"hidden"},{textContent:currentEmailPreview});
+      container.appendChild(p);
+    }
+
     function renderNew(){
       const es=document.getElementById("eState");es.innerHTML="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
+      mkPreview(es);
       es.appendChild(mkLbl("TASK TYPE"));
       // Keyboard hint
       es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task  2=Discuss  3=Waiting  4=Delegate  5=Archive"}));
@@ -1049,6 +1056,7 @@
     function renderView(){
       const es=document.getElementById("eState");es.innerHTML="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
+      mkPreview(es);
       const t=saved.type,bg=TC[t]||"#0078D4";
       const card=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"12px",marginBottom:"10px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
       const typeRow=el("div",{display:"flex",justifyContent:"space-between",alignItems:"flex-start",padding:"5px 0",borderBottom:"1px solid #f0f0f0"});
@@ -1222,14 +1230,29 @@
     function onItemChanged(){
       const item=Office.context.mailbox.item;
       if(!item){
-        currentEmailSubject="Select an email to begin";currentEmailId=null;
+        currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";
         document.getElementById("eSnip").textContent=currentEmailSubject;
         mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};currentTaskId=null;
         renderEmail();return;
       }
       currentEmailSubject=item.subject||"No subject";
       currentEmailId=item.itemId;
+      currentEmailPreview="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
+      // Load email body preview
+      try{
+        item.body.getAsync(Office.CoercionType.Text,{},function(bodyResult){
+          if(currentEmailId!==item.itemId)return;
+          if(bodyResult.status===Office.AsyncResultStatus.Succeeded&&bodyResult.value){
+            var raw=bodyResult.value.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
+            var lines=raw.split("\n").map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
+            var preview=lines.slice(0,4).join("\n");
+            if(preview.length>200)preview=preview.substring(0,200)+"...";
+            currentEmailPreview=preview;
+            renderEmail();
+          }
+        });
+      }catch(e){console.log("Body preview not available:",e);}
       if(isPending(currentEmailId)){
         Office.context.mailbox.item.categories.removeAsync(["High","MedHigh","MedLow","Med","Low","Discuss","Waiting","Delegate","To be Archived"],r=>{
           removePending(currentEmailId);
