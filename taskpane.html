@@ -1006,10 +1006,95 @@
       vs.textContent=val||"—";row.appendChild(vs);card.appendChild(row);
     }
 
+    // AI email summary cache: { emailId: { summary, timestamp } }
+    const aiCache=JSON.parse(localStorage.getItem("k92aiCache")||"{}");
+    function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
+
+    function getAiKey(){ return localStorage.getItem("k92aiKey")||""; }
+    function setAiKey(k){ localStorage.setItem("k92aiKey",k); }
+
+    function mkAiSetup(container){
+      const wrap=el("div",{padding:"10px",background:"#f8fafc",borderRadius:"10px",border:"1px solid #e2e8f0",marginBottom:"10px"});
+      wrap.appendChild(el("div",{fontSize:"12px",fontWeight:"700",color:"#334155",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"6px"},{textContent:"AI Email Summary"}));
+      wrap.appendChild(el("div",{fontSize:"10px",color:"#64748b",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"8px",lineHeight:"1.4"},{textContent:"Enter your OpenAI API key to get AI-generated summaries of what each email needs from you."}));
+      const inp=el("input",{width:"100%",padding:"8px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"6px",border:"1px solid #d0d5dd",boxSizing:"border-box"});
+      inp.type="password";inp.placeholder="sk-...";inp.value=getAiKey();
+      wrap.appendChild(inp);
+      const saveBtn=el("button",{marginTop:"6px",padding:"6px 14px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"6px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"600",cursor:"pointer"},{textContent:"Save Key"});
+      saveBtn.addEventListener("click",()=>{
+        setAiKey(inp.value.trim());
+        setStatus(inp.value.trim()?"API key saved.":"API key cleared.",2000);
+        if(inp.value.trim()&&currentEmailId)generateAiSummary(currentEmailId);
+      });
+      const clearBtn=el("button",{marginTop:"6px",marginLeft:"6px",padding:"6px 14px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontWeight:"500",cursor:"pointer"},{textContent:"Clear"});
+      clearBtn.addEventListener("click",()=>{
+        inp.value="";setAiKey("");setStatus("API key cleared.",2000);
+      });
+      const btnRow=el("div",{display:"flex",gap:"4px"});
+      btnRow.appendChild(saveBtn);btnRow.appendChild(clearBtn);
+      wrap.appendChild(btnRow);
+      container.appendChild(wrap);
+    }
+
+    function generateAiSummary(emailId){
+      const key=getAiKey();
+      if(!key||!currentEmailBody)return;
+      // Check cache (valid for 1 hour)
+      if(aiCache[emailId]&&(Date.now()-aiCache[emailId].timestamp<3600000)){
+        currentEmailPreview=aiCache[emailId].summary;
+        renderEmail();return;
+      }
+      currentEmailPreview="Analysing email...";
+      renderEmail();
+      const bodyText=currentEmailBody.substring(0,3000);
+      fetch("https://api.openai.com/v1/chat/completions",{
+        method:"POST",
+        headers:{"Content-Type":"application/json","Authorization":"Bearer "+key},
+        body:JSON.stringify({
+          model:"gpt-4o-mini",
+          max_tokens:150,
+          messages:[
+            {role:"system",content:"You are an executive assistant for Craig Cook, CFO of K92 Mining. Read the email and provide a brief 1-3 sentence summary focused on: what action is needed from Craig, what is being requested, or what Craig is waiting on. Be direct and concise. Do not use bullet points. Start with the key action or status."},
+            {role:"user",content:"Subject: "+currentEmailSubject+"\n\nEmail body:\n"+bodyText}
+          ]
+        })
+      }).then(r=>{
+        if(!r.ok)throw new Error("API error: "+r.status);
+        return r.json();
+      }).then(data=>{
+        if(currentEmailId!==emailId)return;
+        const summary=data.choices&&data.choices[0]&&data.choices[0].message?data.choices[0].message.content.trim():"";
+        if(summary){
+          currentEmailPreview=summary;
+          aiCache[emailId]={summary:summary,timestamp:Date.now()};
+          saveAiCache();
+        }else{
+          currentEmailPreview="Could not generate summary.";
+        }
+        renderEmail();
+      }).catch(e=>{
+        console.error("AI summary error:",e);
+        if(currentEmailId!==emailId)return;
+        currentEmailPreview="Summary unavailable: "+e.message;
+        renderEmail();
+      });
+    }
+
+    let currentEmailBody="";
+
     function mkPreview(container){
+      if(!getAiKey()){mkAiSetup(container);return;}
       if(!currentEmailPreview)return;
-      const p=el("div",{fontSize:"11px",color:"#64748b",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f8fafc",borderRadius:"8px",borderLeft:"3px solid #cbd5e1",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",maxHeight:"80px",overflow:"hidden"},{textContent:currentEmailPreview});
+      const isLoading=currentEmailPreview==="Analysing email...";
+      const p=el("div",{fontSize:"11px",color:isLoading?"#94a3b8":"#374151",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",fontStyle:isLoading?"italic":"normal"},{textContent:currentEmailPreview});
       container.appendChild(p);
+      // Small gear icon to change API key
+      const gear=el("div",{fontSize:"9px",color:"#94a3b8",cursor:"pointer",textAlign:"right",marginTop:"-6px",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"⚙ AI settings"});
+      gear.addEventListener("click",()=>{
+        const newKey=prompt("OpenAI API key (leave blank to clear):",getAiKey());
+        if(newKey!==null){setAiKey(newKey.trim());setStatus(newKey.trim()?"Key updated.":"Key cleared.",2000);if(newKey.trim()&&currentEmailId){delete aiCache[currentEmailId];saveAiCache();generateAiSummary(currentEmailId);}}
+      });
+      container.appendChild(gear);
     }
 
     function renderNew(){
@@ -1230,29 +1315,29 @@
     function onItemChanged(){
       const item=Office.context.mailbox.item;
       if(!item){
-        currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";
+        currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";currentEmailBody="";
         document.getElementById("eSnip").textContent=currentEmailSubject;
         mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};currentTaskId=null;
         renderEmail();return;
       }
       currentEmailSubject=item.subject||"No subject";
       currentEmailId=item.itemId;
-      currentEmailPreview="";
+      currentEmailPreview="";currentEmailBody="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
-      // Load email body preview
+      // Check AI cache first
+      if(getAiKey()&&aiCache[currentEmailId]&&(Date.now()-aiCache[currentEmailId].timestamp<3600000)){
+        currentEmailPreview=aiCache[currentEmailId].summary;
+      }
+      // Load email body for AI summary
       try{
         item.body.getAsync(Office.CoercionType.Text,{},function(bodyResult){
           if(currentEmailId!==item.itemId)return;
           if(bodyResult.status===Office.AsyncResultStatus.Succeeded&&bodyResult.value){
-            var raw=bodyResult.value.replace(/\r\n/g,"\n").replace(/\r/g,"\n");
-            var lines=raw.split("\n").map(function(l){return l.trim();}).filter(function(l){return l.length>0;});
-            var preview=lines.slice(0,4).join("\n");
-            if(preview.length>200)preview=preview.substring(0,200)+"...";
-            currentEmailPreview=preview;
-            renderEmail();
+            currentEmailBody=bodyResult.value;
+            if(getAiKey())generateAiSummary(currentEmailId);
           }
         });
-      }catch(e){console.log("Body preview not available:",e);}
+      }catch(e){console.log("Body load error:",e);}
       if(isPending(currentEmailId)){
         Office.context.mailbox.item.categories.removeAsync(["High","MedHigh","MedLow","Med","Low","Discuss","Waiting","Delegate","To be Archived"],r=>{
           removePending(currentEmailId);
