@@ -139,7 +139,7 @@
     function mkTextarea(id,placeholder,rows) { const t=document.createElement("textarea"); Object.assign(t.style,{width:"100%",padding:"7px 10px",fontSize:"12px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#222",fontFamily:"'Segoe UI',Arial,sans-serif",resize:"none",display:"block"}); t.rows=rows||2; if(id)t.id=id; if(placeholder)t.placeholder=placeholder; return t; }
     function mkPill(text,bg,color,border) { return el("div",{background:bg,color:color,border:"1px solid "+border,borderRadius:"8px",padding:"7px 10px",fontSize:"11px",marginTop:"10px",lineHeight:"1.4",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:text}); }
     function mkBtn(text,bg,color,border) { return el("button",{width:"100%",padding:"9px",borderRadius:"8px",border:border||"none",background:bg,color:color,fontWeight:"600",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"5px",display:"block",boxShadow:"0 1px 2px rgba(0,0,0,0.06)"},{textContent:text}); }
-    function sType(b,on) { const c=TC[b.dataset.type]||"#0078D4"; Object.assign(b.style,{height:"34px",width:"100%",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"8px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 6px",border:on?"2px solid "+c:"1.5px solid #d0d5dd",background:on?c:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"0 1px 2px rgba(0,0,0,0.04)"}); }
+    function sType(b,on) { const c=TC[b.dataset.type]||"#0078D4"; Object.assign(b.style,{height:"36px",flex:"1",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"8px",cursor:"pointer",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis",padding:"0 4px",border:on?"2px solid "+c:"1.5px solid #d0d5dd",background:on?c:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 6px rgba(0,0,0,0.15)":"0 1px 2px rgba(0,0,0,0.04)",transition:"all 0.15s ease"}); }
     function sEff(b,on) { Object.assign(b.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 4px",border:on?"2px solid "+EC:"1.5px solid #d0d5dd",background:on?EC:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"none"}); }
     function sImp(b,on) {
       const val=parseInt(b.dataset.imp);
@@ -147,7 +147,7 @@
       Object.assign(b.style,{height:"30px",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",flex:"1",borderRadius:"6px",cursor:"pointer",padding:"0 2px",border:on?"2px solid "+c:"1.5px solid #d0d5dd",background:on?c:"#fff",color:on?"#fff":"#555",fontWeight:on?"700":"500",boxShadow:on?"0 2px 4px rgba(0,0,0,0.1)":"none"});
     }
     function mkTypeGrid(cur,cb) {
-      const g=el("div",{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"4px"});
+      const g=el("div",{display:"flex",gap:"6px"});
       Object.keys(TL).forEach(t=>{ const b=el("button",{},{textContent:TL[t]}); b.dataset.type=t; sType(b,t===cur); b.addEventListener("click",()=>{ g.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===t)); if(cb)cb(t); }); g.appendChild(b); });
       return g;
     }
@@ -1032,7 +1032,8 @@
       es.appendChild(addBtn);
       es.appendChild(cancelBtn);
       // Archive button — archives the email without creating a task
-      const archBtn=el("button",{width:"100%",padding:"8px",borderRadius:"8px",border:"1px solid #d0d5dd",background:"#f9fafb",color:"#475467",fontWeight:"600",fontSize:"11px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"14px",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"Archive"});
+      const archBtn=el("button",{height:"36px",flex:"1",fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",borderRadius:"8px",cursor:"pointer",whiteSpace:"nowrap",padding:"0 4px",border:"1.5px solid #d0d5dd",background:"#f9fafb",color:"#475467",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)",transition:"all 0.15s ease"},{textContent:"Archive"});
+      archBtn.dataset.type="archive";
       archBtn.addEventListener("click",()=>{
         if(currentEmailId && window.k92Graph){
           window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
@@ -1040,7 +1041,7 @@
           }).then(()=>{setStatus("Email archived.",3000);}).catch(e=>console.error("Archive failed:",e));
         }
       });
-      es.appendChild(archBtn);
+      tg.appendChild(archBtn);
     }
 
     function renderView(){
