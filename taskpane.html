@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v9";
+    const AI_CACHE_VER="v10";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1081,8 +1081,8 @@
           headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
-            max_tokens:150,
-            system:"Summarise this email thread for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Check the FULL thread — if Craig (ccook@k92mining.com) has already replied or sent information, acknowledge that and focus on what remains (e.g. 'You already replied with X. Follow up on...'). If no reply from Craig, suggest next action. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
+            max_tokens:200,
+            system:"Analyse this email for Craig Cook (CFO, K92 Mining). Return ONLY valid JSON with these fields:\n{\"to\":\"recipient name\",\"from\":\"sender name (company)\",\"action\":\"what needs to happen — 1-2 sentences\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to' is who the email is addressed to (use first names)\n- 'from' is who sent it, include company/role in brackets if known\n- 'action' describes what Craig needs to do. If Craig already replied in the thread, say what remains (e.g. 'You sent the info. Follow up on...'). Use 'you' not Craig's name. Be specific.\n- 'status' is 'action_needed' if Craig must act, 'waiting' if awaiting others, 'info_only' if FYI\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1091,10 +1091,14 @@
         return r.json();
       }).then(data=>{
         if(currentEmailId!==emailId)return;
-        const summary=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():"";
-        if(summary){
-          currentEmailPreview=summary;
-          aiCache[cacheKey]={summary:summary,timestamp:Date.now()};
+        const raw=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():"";
+        if(raw){
+          // Try to parse as JSON, fall back to plain text
+          var parsed=null;
+          try{var jsonStr=raw.replace(/^[^{]*/, '').replace(/[^}]*$/, '');parsed=JSON.parse(jsonStr);}catch(e){parsed=null;}
+          var summaryData=parsed&&parsed.action?JSON.stringify(parsed):raw;
+          currentEmailPreview=summaryData;
+          aiCache[cacheKey]={summary:summaryData,timestamp:Date.now()};
           saveAiCache();
         }else{
           currentEmailPreview="Could not generate summary.";
@@ -1114,7 +1118,30 @@
       if(!getAiKey()){mkAiSetup(container);return;}
       if(!currentEmailPreview)return;
       const isLoading=currentEmailPreview==="Analysing email...";
-      const p=el("div",{fontSize:"11px",color:isLoading?"#94a3b8":"#374151",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",fontStyle:isLoading?"italic":"normal"},{textContent:currentEmailPreview});
+      // Try to parse structured JSON summary
+      var parsed=null;
+      if(!isLoading){try{parsed=JSON.parse(currentEmailPreview);}catch(e){parsed=null;}}
+      var p;
+      if(parsed&&parsed.action){
+        p=el("div",{fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"10px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px"});
+        var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#6B7280":"#3b82f6";
+        function addField(label,value,color){
+          var row=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
+          row.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"48px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:label}));
+          row.appendChild(el("span",{fontSize:"11px",color:color||"#374151",wordBreak:"break-word"},{textContent:value}));
+          p.appendChild(row);
+        }
+        if(parsed.to)addField("To",parsed.to);
+        if(parsed.from)addField("From",parsed.from);
+        addField("Action",parsed.action,"#1a1a1a");
+        if(parsed.status){
+          var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":"Info only";
+          var badge=el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",marginTop:"4px",letterSpacing:"0.03em"},{textContent:statusLabel});
+          p.appendChild(badge);
+        }
+      }else{
+        p=el("div",{fontSize:"11px",color:isLoading?"#94a3b8":"#374151",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",fontStyle:isLoading?"italic":"normal"},{textContent:currentEmailPreview});
+      }
       container.appendChild(p);
       // Small gear icon to change API key
       const gear=el("div",{fontSize:"9px",color:"#94a3b8",cursor:"pointer",textAlign:"right",marginTop:"-6px",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif"},{textContent:"⚙ AI settings"});
