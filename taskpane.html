@@ -1009,7 +1009,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v7";
+    const AI_CACHE_VER="v8";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1050,18 +1050,30 @@
       }
       currentEmailPreview="Analysing email...";
       renderEmail();
-      const bodyText=currentEmailBody.substring(0,1500);
-      fetch("https://api.anthropic.com/v1/messages",{
-        method:"POST",
-        headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
-        body:JSON.stringify({
-          model:"claude-haiku-4-5-20251001",
-          max_tokens:150,
-          system:"Summarise this email for Craig Cook (CFO, K92 Mining). Use 'you' not his name. You can only see the email Craig is currently viewing — you CANNOT see whether Craig has already replied, so NEVER say 'Respond to'. Instead use neutral verbs like 'Review', 'Discuss with X about', 'Follow up with X on', 'Confirm with X'. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
-          messages:[
-            {role:"user",content:"Subject: "+currentEmailSubject+"\n\nEmail body:\n"+bodyText}
-          ]
-        })
+      // Try to get full conversation thread via Graph API
+      var convId=null;
+      try{convId=Office.context.mailbox.item.conversationId||null;}catch(e){}
+      var threadPromise=convId&&window.k92Graph&&window.k92Graph.getConversationMessages?window.k92Graph.getConversationMessages(convId):Promise.resolve([]);
+      threadPromise.catch(()=>[]).then(msgs=>{
+        var emailContent="Subject: "+currentEmailSubject+"\n\n";
+        if(msgs&&msgs.length>1){
+          emailContent+="FULL EMAIL THREAD (oldest first):\n";
+          msgs.forEach((m,i)=>{emailContent+="--- Message "+(i+1)+" from "+m.from+" ---\n"+m.body.substring(0,400)+"\n\n";});
+        }else{
+          emailContent+="Email body:\n"+currentEmailBody.substring(0,1500);
+        }
+        // Trim total to 2000 chars to control cost
+        emailContent=emailContent.substring(0,2000);
+        return fetch("https://api.anthropic.com/v1/messages",{
+          method:"POST",
+          headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
+          body:JSON.stringify({
+            model:"claude-haiku-4-5-20251001",
+            max_tokens:150,
+            system:"Summarise this email thread for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Check the FULL thread — if Craig has already replied or sent information, acknowledge that and focus on what remains (e.g. 'You have sent X the info. Discuss...'). If no reply from Craig, suggest next action. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
+            messages:[{role:"user",content:emailContent}]
+          })
+        });
       }).then(r=>{
         if(!r.ok)throw new Error("API error: "+r.status);
         return r.json();
