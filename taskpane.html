@@ -384,6 +384,16 @@
             (t.emailId && t.emailId===m.id)
           );
           if(existing){
+            // Auto-clear Waiting tasks when a reply arrives from someone else in the conversation
+            const fromAddr=(m.from&&m.from.emailAddress&&m.from.emailAddress.address||"").toLowerCase();
+            const userAddr=(Office.context.mailbox.userProfile.emailAddress||"").toLowerCase();
+            if(existing.type==="waiting"&&fromAddr&&userAddr&&fromAddr!==userAddr&&existing.emailId!==m.id){
+              // New email from someone else in a Waiting conversation — clear the waiting task
+              tasks.splice(tasks.indexOf(existing),1);saveTasks();
+              // Clear Outlook categories from conversation
+              if(m.conversationId&&window.k92Graph){window.k92Graph.clearConversationCategories(m.conversationId).catch(e=>console.log("Clear cat error:",e));}
+              return;
+            }
             // Backfill conversationId, always update sender from scan data
             let changed=false;
             if(!existing.conversationId && m.conversationId){existing.conversationId=m.conversationId;changed=true;}
@@ -1369,6 +1379,22 @@
       const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
         tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId);
       if(existingTask){
+        // Auto-clear Waiting tasks when a reply arrives from someone else
+        var userEmail="";try{userEmail=(Office.context.mailbox.userProfile.emailAddress||"").toLowerCase();}catch(e){}
+        var fromEmail="";try{var f=item.from;fromEmail=f&&f.emailAddress?(f.emailAddress.address||"").toLowerCase():"";}catch(e){}
+        if(existingTask.type==="waiting"&&userEmail&&fromEmail&&fromEmail!==userEmail&&existingTask.emailId!==currentEmailId){
+          // Someone else replied to a conversation we were waiting on — clear the waiting task
+          tasks.splice(tasks.indexOf(existingTask),1);saveTasks();
+          // Clear Outlook categories from conversation
+          var cid=null;try{cid=Office.context.mailbox.item.conversationId;}catch(e){}
+          if(cid&&window.k92Graph){window.k92Graph.clearConversationCategories(cid).catch(e=>console.log("Clear cat error:",e));}
+          Office.context.mailbox.item.categories.removeAsync(["Waiting"],function(){});
+          currentTaskId=null;mode="new";
+          form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
+          setStatus("Waiting task cleared — reply received from "+(item.from&&item.from.displayName?item.from.displayName:"sender")+".",4000);
+          renderEmail();renderDash();
+          return;
+        }
         currentTaskId=existingTask.id;
         saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",discussWith:existingTask.discussWith||"",notes:existingTask.notes||""};
         mode="view";
