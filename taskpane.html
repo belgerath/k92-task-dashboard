@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v10";
+    const AI_CACHE_VER="v11";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1082,7 +1082,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:200,
-            system:"Analyse this email for Craig Cook (CFO, K92 Mining). Return ONLY valid JSON with these fields:\n{\"to\":\"recipient name\",\"from\":\"sender name (company)\",\"action\":\"what needs to happen — 1-2 sentences\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to' is who the email is addressed to (use first names)\n- 'from' is who sent it, include company/role in brackets if known\n- 'action' describes what Craig needs to do. If Craig already replied in the thread, say what remains (e.g. 'You sent the info. Follow up on...'). Use 'you' not Craig's name. Be specific.\n- 'status' is 'action_needed' if Craig must act, 'waiting' if awaiting others, 'info_only' if FYI\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\",\"item 2\"],\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of specific action items. Each item is one clear task. Use 'you' not Craig's name. If Craig already replied, say what remains.\n- 'status': ONLY 'action_needed' if Craig personally must act. If email is TO someone else and Craig is just CC'd, use 'info_only'. If awaiting others, use 'waiting'.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1125,15 +1125,26 @@
       if(parsed&&parsed.action){
         p=el("div",{fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"10px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px"});
         var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#6B7280":"#3b82f6";
-        function addField(label,value,color){
+        function addField(label,value){
           var row=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
           row.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"48px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:label}));
-          row.appendChild(el("span",{fontSize:"11px",color:color||"#374151",wordBreak:"break-word"},{textContent:value}));
+          row.appendChild(el("span",{fontSize:"11px",color:"#374151",wordBreak:"break-word"},{textContent:value}));
           p.appendChild(row);
         }
         if(parsed.to)addField("To",parsed.to);
         if(parsed.from)addField("From",parsed.from);
-        addField("Action",parsed.action,"#1a1a1a");
+        // Render action as numbered list if array, otherwise single line
+        var actions=Array.isArray(parsed.action)?parsed.action:[parsed.action];
+        var actionRow=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
+        actionRow.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"48px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:"Action"}));
+        var actionList=el("div",{fontSize:"11px",color:"#1a1a1a",wordBreak:"break-word",flex:"1"});
+        actions.forEach(function(item,i){
+          var line=el("div",{marginBottom:i<actions.length-1?"4px":"0"});
+          line.textContent=(actions.length>1?(i+1)+". ":"")+item;
+          actionList.appendChild(line);
+        });
+        actionRow.appendChild(actionList);
+        p.appendChild(actionRow);
         if(parsed.status){
           var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":"Info only";
           var badge=el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",marginTop:"4px",letterSpacing:"0.03em"},{textContent:statusLabel});
