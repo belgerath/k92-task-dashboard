@@ -1009,7 +1009,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v8";
+    const AI_CACHE_VER="v9";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1043,16 +1043,18 @@
     function generateAiSummary(emailId){
       const key=getAiKey();
       if(!key||!currentEmailBody)return;
+      // Use conversationId as cache key so all emails in same thread share one summary
+      var convId=null;
+      try{convId=Office.context.mailbox.item.conversationId||null;}catch(e){}
+      var cacheKey=convId||emailId;
       // Check cache (valid for 24 hours)
-      if(aiCache[emailId]&&(Date.now()-aiCache[emailId].timestamp<86400000)){
-        currentEmailPreview=aiCache[emailId].summary;
+      if(aiCache[cacheKey]&&(Date.now()-aiCache[cacheKey].timestamp<86400000)){
+        currentEmailPreview=aiCache[cacheKey].summary;
         renderEmail();return;
       }
       currentEmailPreview="Analysing email...";
       renderEmail();
-      // Try to get full conversation thread via Graph API
-      var convId=null;
-      try{convId=Office.context.mailbox.item.conversationId||null;}catch(e){}
+      // Get full conversation thread via Graph API
       var threadPromise=convId&&window.k92Graph&&window.k92Graph.getConversationMessages?window.k92Graph.getConversationMessages(convId):Promise.resolve([]);
       threadPromise.catch(()=>[]).then(msgs=>{
         var emailContent="Subject: "+currentEmailSubject+"\n\n";
@@ -1070,7 +1072,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:150,
-            system:"Summarise this email thread for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Check the FULL thread — if Craig has already replied or sent information, acknowledge that and focus on what remains (e.g. 'You have sent X the info. Discuss...'). If no reply from Craig, suggest next action. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
+            system:"Summarise this email thread for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Check the FULL thread — if Craig (ccook@k92mining.com) has already replied or sent information, acknowledge that and focus on what remains (e.g. 'You already replied with X. Follow up on...'). If no reply from Craig, suggest next action. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1082,7 +1084,7 @@
         const summary=data.content&&data.content[0]&&data.content[0].text?data.content[0].text.trim():"";
         if(summary){
           currentEmailPreview=summary;
-          aiCache[emailId]={summary:summary,timestamp:Date.now()};
+          aiCache[cacheKey]={summary:summary,timestamp:Date.now()};
           saveAiCache();
         }else{
           currentEmailPreview="Could not generate summary.";
@@ -1342,9 +1344,12 @@
       currentEmailId=item.itemId;
       currentEmailPreview="";currentEmailBody="";
       document.getElementById("eSnip").textContent=currentEmailSubject;
-      // Check AI cache first
-      if(getAiKey()&&aiCache[currentEmailId]&&(Date.now()-aiCache[currentEmailId].timestamp<86400000)){
-        currentEmailPreview=aiCache[currentEmailId].summary;
+      // Check AI cache first (use conversationId as key for thread-level caching)
+      var earlyConvId=null;
+      try{earlyConvId=item.conversationId||null;}catch(e){}
+      var earlyCacheKey=earlyConvId||currentEmailId;
+      if(getAiKey()&&aiCache[earlyCacheKey]&&(Date.now()-aiCache[earlyCacheKey].timestamp<86400000)){
+        currentEmailPreview=aiCache[earlyCacheKey].summary;
       }
       // Load email body for AI summary
       try{
