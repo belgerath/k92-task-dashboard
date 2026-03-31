@@ -1007,7 +1007,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v3";
+    const AI_CACHE_VER="v4";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1053,7 +1053,7 @@
         method:"POST",
         headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({
-          model:"claude-3-5-haiku-latest",
+          model:"claude-haiku-4-5-20251001",
           max_tokens:200,
           system:"You summarise emails for the reader, who is Craig Cook, CFO of K92 Mining. Write as if speaking directly to Craig — use 'you' not his name. Start with the action verb (e.g. 'Review...', 'Approve...', 'Respond to...'). Use 2-3 short sentences max. Separate distinct points into new paragraphs. Never use bullet points, lists, or markdown. Be specific about who is asking and what they need. If the email is informational with no action required, say so briefly.",
           messages:[
