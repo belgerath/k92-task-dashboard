@@ -1009,7 +1009,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v6";
+    const AI_CACHE_VER="v7";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1057,7 +1057,7 @@
         body:JSON.stringify({
           model:"claude-haiku-4-5-20251001",
           max_tokens:150,
-          system:"Summarise this email chain for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Read the FULL chain — if Craig has already replied, do NOT say 'Respond to' — instead summarise the current state (e.g. 'Follow up with X on...' or 'Discuss with X about...'). Start with action verb. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
+          system:"Summarise this email for Craig Cook (CFO, K92 Mining). Use 'you' not his name. You can only see the email Craig is currently viewing — you CANNOT see whether Craig has already replied, so NEVER say 'Respond to'. Instead use neutral verbs like 'Review', 'Discuss with X about', 'Follow up with X on', 'Confirm with X'. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
           messages:[
             {role:"user",content:"Subject: "+currentEmailSubject+"\n\nEmail body:\n"+bodyText}
           ]
