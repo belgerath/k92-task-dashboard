@@ -242,6 +242,7 @@
       } else if(type==="discuss"){
         container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value; fd.addEventListener("change",e=>form.dueDate=e.target.value); container.appendChild(wrapKbGroup(fd));
         container.appendChild(mkLbl("IMPORTANCE (1–5)")); container.appendChild(mkImportanceRow(form.importance||null,v=>{form.importance=v;}));
+        container.appendChild(mkLbl("DISCUSS WITH")); const fw=mkInput("text","fDiscWith","Person to discuss with"); fw.value=form.discussWith||""; fw.addEventListener("input",e=>form.discussWith=e.target.value); container.appendChild(wrapKbGroup(fw));
         container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(mkPill("Will appear in Discuss section","#DCFCE7","#166534","#86EFAC"));
       } else if(type==="task"){
@@ -399,7 +400,7 @@
           const due=new Date(localToday().getTime()+defaultDays*864e5);
           const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
           const fromName=(m.from&&m.from.emailAddress&&m.from.emailAddress.name)||"";
-          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null,sender:fromName});
+          tasks.push({title:m.subject||"No subject",days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",discussWith:"",notes:"",id:nid++,emailId:m.id,conversationId:m.conversationId||null,sender:fromName});
         });
         // Remove stale tasks: tasks with emailId that are no longer in the scan results
         const scannedIds=new Set(deduped.map(m=>m.id));
@@ -469,6 +470,7 @@
       if(t.notes)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#FFFBEB",color:"#92400E",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"📝"}));
       if(t.type==="delegated"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f2f4f7",color:"#475467",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"→ "+t.who}));
       if(t.type==="waiting"&&t.who)meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#f0f0f0",color:"#555",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"waiting: "+t.who}));
+      if(t.type==="discuss"&&(t.discussWith||t.who))meta.appendChild(el("span",{fontSize:"9px",padding:"2px 6px",borderRadius:"10px",background:"#DCFCE7",color:"#166534",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"discuss: "+(t.discussWith||t.who)}));
       card.appendChild(meta);
       // Action buttons row
       const br=el("div",{display:"flex",justifyContent:"space-between",alignItems:"center"});
@@ -503,7 +505,7 @@
         currentTaskId=t.id;
         currentEmailSubject=t.title;
         currentEmailId=t.emailId||null;
-        saved={type:t.type,effort:t.effort||"",importance:t.importance||null,dueDate:t.dueDate||"",delegateTo:t.delegateTo||"",waitingWho:t.waitingWho||"",notes:t.notes||""};
+        saved={type:t.type,effort:t.effort||"",importance:t.importance||null,dueDate:t.dueDate||"",delegateTo:t.delegateTo||"",waitingWho:t.waitingWho||"",discussWith:t.discussWith||"",notes:t.notes||""};
         form={...saved};
         mode="edit";
         switchTab("Email");
@@ -528,7 +530,7 @@
         } else if(t.emailId){ addPending(t.emailId); }
         logCompletion(t);
         if(!t.recurring){removeTask(t.id);}
-        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};renderEmail();}
         renderDash();
       });
       // Cancel button — remove categories, no archive
@@ -545,7 +547,7 @@
           clearOutlookColour();
         }
         if(!t.recurring){removeTask(t.id);}
-        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+        if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};renderEmail();}
         renderDash();
       });
       const rightBtns=el("div",{display:"flex",gap:"4px"});
@@ -884,7 +886,7 @@
             } else if(t.emailId){ addPending(t.emailId); }
             logCompletion(t);
             if(!t.recurring){removeTask(t.id);}
-            if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};renderEmail();}
+            if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};renderEmail();}
             renderTiles();renderDash();
           });
 
@@ -959,7 +961,7 @@
     }
 
     // ── Email tab ─────────────────────────────────────────────
-    let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    let mode="new",saved={},form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};
     let currentTaskId=null,currentEmailSubject="Selected email",currentEmailId=null,currentEmailPreview="";
 
     function removeOutlookColour(){
@@ -1007,7 +1009,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v5";
+    const AI_CACHE_VER="v6";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1055,7 +1057,7 @@
         body:JSON.stringify({
           model:"claude-haiku-4-5-20251001",
           max_tokens:150,
-          system:"Summarise this email for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Start with action verb (Review/Approve/Respond). 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
+          system:"Summarise this email chain for Craig Cook (CFO, K92 Mining). Use 'you' not his name. Read the FULL chain — if Craig has already replied, do NOT say 'Respond to' — instead summarise the current state (e.g. 'Follow up with X on...' or 'Discuss with X about...'). Start with action verb. 2-3 sentences max, new paragraph per point. No bullets or markdown. Be specific about who and what.",
           messages:[
             {role:"user",content:"Subject: "+currentEmailSubject+"\n\nEmail body:\n"+bodyText}
           ]
@@ -1112,7 +1114,7 @@
       const cancelBtn=mkBtn("Cancel","#fff","#475467","1px solid #d0d5dd");
       cancelBtn.style.display="none";
       cancelBtn.addEventListener("click",()=>{
-        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};
         mode="new";renderEmail();
       });
       const tg=mkTypeGrid(form.type,t=>{form.type=t;buildFields(t,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";setTimeout(()=>{const fd=document.getElementById("fDate");if(fd)fd.focus();},50);});
@@ -1122,7 +1124,7 @@
         if(!form.type){setStatus("Please select a task type.",3000);return;}
         if(!form.dueDate){setStatus("Please set a due date.",3000);return;}
         saved={...form};
-        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});
+        addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||saved.discussWith||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",discussWith:saved.discussWith||"",notes:saved.notes||""});
         mode="view";renderEmail();
       });
       es.appendChild(addBtn);
@@ -1153,7 +1155,7 @@
       typeRow.appendChild(vs);card.appendChild(typeRow);
       if(t==="waiting"){vRow("Expected",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Waiting on",saved.waitingWho||"—",card);if(saved.notes)vRow("Details",saved.notes,card);}
       else if(t==="delegated"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Delegated to",saved.delegateTo||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
-      else if(t==="discuss"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
+      else if(t==="discuss"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Discuss with",saved.discussWith||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
       else{vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.effort)vRow("Effort",saved.effort,card);if(saved.notes)vRow("Notes",saved.notes,card);}
       if(card.lastChild&&card.lastChild.style)card.lastChild.style.borderBottom="none";
       es.appendChild(card);
@@ -1180,7 +1182,7 @@
           if(task)logCompletion(task);
           removeTask(currentTaskId);
         }
-        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};
         saved={};mode="new";renderEmail();renderDash();
       });es.appendChild(cmpBtn);
       const canBtn=mkBtn("Cancel task","#FCEBEB","#791F1F","1px solid #F7C1C1");
@@ -1194,7 +1196,7 @@
         }
         clearOutlookColour();
         if(currentTaskId!==null)removeTask(currentTaskId);
-        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};mode="new";renderEmail();renderDash();
+        currentTaskId=null;form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};mode="new";renderEmail();renderDash();
       });es.appendChild(canBtn);
     }
 
@@ -1206,7 +1208,7 @@
       es.appendChild(el("div",{fontSize:"10px",color:"#aaa",margin:"2px 0 8px",fontStyle:"italic",fontFamily:"Arial,sans-serif"},{textContent:"Type locked — cancel task to change"}));
       const fieldsDiv=el("div",{});es.appendChild(fieldsDiv);buildFields(form.type,form,fieldsDiv);
       const saveBtn=mkBtn("Save changes","#0078D4","#fff","none");
-      saveBtn.addEventListener("click",()=>{saved={...form};addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",notes:saved.notes||""});mode="view";renderEmail();});
+      saveBtn.addEventListener("click",()=>{saved={...form};addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||saved.discussWith||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",discussWith:saved.discussWith||"",notes:saved.notes||""});mode="view";renderEmail();});
       es.appendChild(saveBtn);
       const discardBtn=mkBtn("Discard changes","#fff","#333","1px solid #ccc");
       discardBtn.addEventListener("click",()=>{form={...saved};mode="view";renderEmail();});es.appendChild(discardBtn);
@@ -1220,7 +1222,7 @@
     renderEmail();
 
     // ── Dashboard manual task ─────────────────────────────────
-    let dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};
+    let dType="",dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};
     function renderManualForm(){
       const mf=document.getElementById("mForm");mf.innerHTML="";
       const box=el("div",{background:"#fff",border:"1px solid #e5e7eb",borderRadius:"10px",padding:"14px",marginBottom:"12px",boxShadow:"0 1px 3px rgba(0,0,0,0.06)"});
@@ -1235,10 +1237,10 @@
       const addB=el("button",{flex:"1",padding:"9px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add task"});
       addB.addEventListener("click",()=>{
         const title=titleInp.value.trim()||"Manual task";
-        tasks.push({id:nid++,title,days:daysFromDate(dForm.dueDate),dueDate:dForm.dueDate||"",type:dType||"task",effort:dForm.effort||"",importance:dForm.importance||null,who:dForm.waitingWho||dForm.delegateTo||"",delegateTo:dForm.delegateTo||"",waitingWho:dForm.waitingWho||"",notes:dForm.notes||""});
+        tasks.push({id:nid++,title,days:daysFromDate(dForm.dueDate),dueDate:dForm.dueDate||"",type:dType||"task",effort:dForm.effort||"",importance:dForm.importance||null,who:dForm.waitingWho||dForm.delegateTo||dForm.discussWith||"",delegateTo:dForm.delegateTo||"",waitingWho:dForm.waitingWho||"",discussWith:dForm.discussWith||"",notes:dForm.notes||""});
         saveTasks();
         document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";
-        titleInp.value="";dType="";dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};renderDash();
+        titleInp.value="";dType="";dForm={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};renderDash();
       });
       const canB=el("button",{padding:"0 12px",height:"36px",borderRadius:"8px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600"},{textContent:"Cancel"});
       canB.addEventListener("click",()=>{document.getElementById("mForm").style.display="none";document.getElementById("newTaskBtn").style.display="block";});
@@ -1321,7 +1323,7 @@
       if(!item){
         currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";currentEmailBody="";
         document.getElementById("eSnip").textContent=currentEmailSubject;
-        mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};currentTaskId=null;
+        mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};currentTaskId=null;
         renderEmail();return;
       }
       currentEmailSubject=item.subject||"No subject";
@@ -1351,13 +1353,13 @@
         tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId);
       if(existingTask){
         currentTaskId=existingTask.id;
-        saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",notes:existingTask.notes||""};
+        saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",discussWith:existingTask.discussWith||"",notes:existingTask.notes||""};
         mode="view";
         // If matched via conversation (not exact email), apply colour to current email too
         if(existingTask.emailId!==currentEmailId){ applyOutlookColour(existingTask); }
       } else {
         currentTaskId=null;mode="new";
-        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",notes:""};saved={};
+        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
         // Auto-detect manually applied Outlook categories and create a task
         // Capture state at call time to prevent race condition during rapid email switching
         const snapEmailId=currentEmailId;
@@ -1375,12 +1377,12 @@
           const defaultDays=found==="High"?2:found==="MedHigh"?5:(found==="MedLow"||found==="Med")?7:14;
           const due=new Date(localToday().getTime()+defaultDays*864e5);
           const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
-          const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",notes:"",id:nid++,emailId:snapEmailId};
+          const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",discussWith:"",notes:"",id:nid++,emailId:snapEmailId};
           try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
           try{const f=Office.context.mailbox.item.from;autoTask.sender=f&&f.displayName?f.displayName:"";}catch(e){autoTask.sender="";}
           tasks.push(autoTask);saveTasks();
           currentTaskId=autoTask.id;
-          saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",notes:""};
+          saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",discussWith:"",notes:""};
           mode="view";renderEmail();renderDash();
           setStatus("Task auto-created from email category.",3000);
           return;
