@@ -1276,12 +1276,14 @@
       const emailTab=document.getElementById("pEmail");
       if(!emailTab||!emailTab.classList.contains("active"))return;
       // Key 5 = Archive (in new mode only)
-      if(e.key==="5"&&mode==="new"){
+      if(e.key==="5"){
         e.preventDefault();
+        if(mode!=="new")return;
         if(currentEmailId && window.k92Graph){
+          setStatus("Archiving...",2000);
           window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
             return window.k92Graph.archiveMessage(currentEmailId);
-          }).then(()=>{setStatus("Email archived.",3000);}).catch(e=>console.error("Archive failed:",e));
+          }).then(()=>{setStatus("Email archived.",3000);}).catch(err=>{setStatus("Archive failed: "+err.message,3000);});
         }
         return;
       }
