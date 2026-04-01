@@ -54,10 +54,10 @@
   </div>
 
   <script>
-    const TC = { task:"#0078D4", discuss:"#16A34A", waiting:"#6B7280", delegated:"#6B7280", info:"#3B82F6" };
-    const TA = { task:"#EA580C", discuss:"#16A34A", waiting:"#9CA3AF", delegated:"#9CA3AF", info:"#60A5FA" };
-    const TB = { task:"rgba(234,88,12,0.06)", discuss:"rgba(22,163,74,0.06)", waiting:"rgba(156,163,175,0.06)", delegated:"rgba(156,163,175,0.06)", info:"rgba(59,130,246,0.06)" };
-    const TL = { task:"Task", discuss:"Discuss", waiting:"Waiting", delegated:"Delegate", info:"Info" };
+    const TC = { task:"#0078D4", discuss:"#16A34A", waiting:"#6B7280", delegated:"#6B7280" };
+    const TA = { task:"#EA580C", discuss:"#16A34A", waiting:"#9CA3AF", delegated:"#9CA3AF" };
+    const TB = { task:"rgba(234,88,12,0.06)", discuss:"rgba(22,163,74,0.06)", waiting:"rgba(156,163,175,0.06)", delegated:"rgba(156,163,175,0.06)" };
+    const TL = { task:"Task", discuss:"Discuss", waiting:"Waiting", delegated:"Delegate" };
     const EC = "#185FA5";
 
     // ── Debug log ─────────────────────────────────────────────
@@ -245,10 +245,6 @@
         container.appendChild(mkLbl("DISCUSS WITH")); const fw=mkInput("text","fDiscWith","Person to discuss with"); fw.value=form.discussWith||""; fw.addEventListener("input",e=>form.discussWith=e.target.value); container.appendChild(wrapKbGroup(fw));
         container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","What do you need to discuss?"); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
         container.appendChild(mkPill("Will appear in Discuss section","#DCFCE7","#166534","#86EFAC"));
-      } else if(type==="info"){
-        // Info type — minimal fields, just archive or note
-        container.appendChild(mkLbl("NOTES")); const fn=mkTextarea("fNotes","Optional notes..."); fn.value=form.notes||""; fn.addEventListener("input",e=>form.notes=e.target.value); container.appendChild(wrapKbGroup(fn));
-        container.appendChild(mkPill("Informational — no action required","#EFF6FF","#1E40AF","#BFDBFE"));
       } else if(type==="task"){
         container.appendChild(mkLbl("DUE DATE")); const fd=mkInput("date","fDate"); fd.value=form.dueDate||dateStr(localToday()); if(!form.dueDate)form.dueDate=fd.value;
         const pill=mkTaskColourPill();
@@ -609,7 +605,7 @@
       document.getElementById("tabTiles").textContent="Tiles"+(overdue?" \u26a0":"");
     }
 
-    let dashFilters={task:true,discuss:true,waiting:true,delegated:true,info:true,overdueOnly:false};
+    let dashFilters={task:true,discuss:true,waiting:true,delegated:true,overdueOnly:false};
     let dashSearchQuery="";
 
     function renderDashFilters(){
@@ -635,7 +631,7 @@
       allTasks=allTasks.filter(t=>dashFilters[t.type]);
       if(dashFilters.overdueOnly)allTasks=allTasks.filter(t=>t.days<0);
       if(dashSearchQuery){const q=dashSearchQuery.toLowerCase();allTasks=allTasks.filter(t=>(t.title||"").toLowerCase().includes(q)||(t.sender||"").toLowerCase().includes(q)||(t.notes||"").toLowerCase().includes(q));}
-      const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting"),inf=allTasks.filter(t=>t.type==="info");
+      const mine=allTasks.filter(t=>t.type==="task"),disc=allTasks.filter(t=>t.type==="discuss"),del=allTasks.filter(t=>t.type==="delegated"),wait=allTasks.filter(t=>t.type==="waiting");
       addST(dc,"MY ACTION ITEMS");
       dc.appendChild(secH("high","#DC2626","High priority",sortByDue(mine.filter(t=>priLabel(t.days,t.importance)==="High"))));
       dc.appendChild(secH("medhigh","#EA580C","Med-High priority",sortByDue(mine.filter(t=>priLabel(t.days,t.importance)==="MedHigh"))));
@@ -643,7 +639,6 @@
       dc.appendChild(secH("low","#EAB308","Low priority",sortByDue(mine.filter(t=>priLabel(t.days,t.importance)==="Low"))));
       addST(dc,"DISCUSS");dc.appendChild(secH("discuss","#16A34A","Items to discuss",sortByDue(disc)));
       addST(dc,"MONITORING");dc.appendChild(secH("delegated","#6B7280","Delegated",sortByDue(del)));dc.appendChild(secH("waiting","#6B7280","Waiting",sortByDue(wait)));
-      if(inf.length){addST(dc,"INFORMATIONAL");dc.appendChild(secH("info","#3B82F6","Info only",inf));}
       // Recurring task editor button
       const recBtn=el("button",{fontSize:"10px",padding:"3px 8px",borderRadius:"6px",border:"1px solid #d0d5dd",background:"#fff",color:"#475467",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",fontWeight:"600",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"⚙ Recurring tasks"});
       recBtn.addEventListener("click",()=>renderRecurringEditor(dc));
@@ -1174,7 +1169,7 @@
       mkPreview(es);
       es.appendChild(mkLbl("TASK TYPE"));
       // Keyboard hint
-      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task 2=Discuss 3=Waiting 4=Delegate 5=Info 6=Archive"}));
+      es.appendChild(el("div",{fontSize:"9px",color:"#98a2b3",fontFamily:"'Segoe UI',Arial,sans-serif",marginBottom:"4px"},{textContent:"Shortcut: 1=Task 2=Discuss 3=Waiting 4=Delegate 5=Archive"}));
       const fieldsDiv=el("div",{});
       const addBtn=el("button",{width:"100%",padding:"10px",borderRadius:"8px",border:"none",background:"#0078D4",color:"#fff",fontWeight:"700",fontSize:"12px",cursor:"pointer",fontFamily:"'Segoe UI',Arial,sans-serif",marginTop:"10px",display:"none",boxShadow:"0 1px 3px rgba(0,120,212,0.3)"},{textContent:"+ Add to tasks"});
       addBtn.classList.add("kb-group");
@@ -1190,18 +1185,23 @@
       if(!form.type&&currentEmailPreview){
         try{
           var aiData=JSON.parse(currentEmailPreview);
-          var suggestType=aiData.status==="info_only"?"info":aiData.status==="waiting"?"waiting":aiData.status==="action_needed"?"task":"";
-          if(suggestType){
-            form.type=suggestType;
-            tg.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===suggestType));
-            buildFields(suggestType,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";
+          if(aiData.status==="info_only"){
+            // Highlight Archive button for info-only emails
+            setTimeout(()=>{const ab=document.querySelector('#eState button[data-type="archive"]');if(ab){ab.style.background="#3B82F6";ab.style.color="#fff";ab.style.borderLeft="4px solid #2563EB";ab.style.boxShadow="0 2px 6px rgba(59,130,246,0.25)";}},50);
+          } else {
+            var suggestType=aiData.status==="waiting"?"waiting":aiData.status==="action_needed"?"task":"";
+            if(suggestType){
+              form.type=suggestType;
+              tg.querySelectorAll("button").forEach(x=>sType(x,x.dataset.type===suggestType));
+              buildFields(suggestType,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";
+            }
           }
         }catch(e){}
       }
       if(form.type){buildFields(form.type,form,fieldsDiv);addBtn.style.display="block";cancelBtn.style.display="block";}
       addBtn.addEventListener("click",()=>{
         if(!form.type){setStatus("Please select a task type.",3000);return;}
-        if(!form.dueDate&&form.type!=="info"){setStatus("Please set a due date.",3000);return;}
+        if(!form.dueDate){setStatus("Please set a due date.",3000);return;}
         saved={...form};
         addOrReplace({title:currentEmailSubject,days:daysFromDate(saved.dueDate),dueDate:saved.dueDate||"",type:saved.type,effort:saved.effort||"",importance:saved.importance||null,who:saved.waitingWho||saved.delegateTo||saved.discussWith||"",delegateTo:saved.delegateTo||"",waitingWho:saved.waitingWho||"",discussWith:saved.discussWith||"",notes:saved.notes||""});
         mode="view";renderEmail();
@@ -1235,7 +1235,6 @@
       if(t==="waiting"){vRow("Expected",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Waiting on",saved.waitingWho||"—",card);if(saved.notes)vRow("Details",saved.notes,card);}
       else if(t==="delegated"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Delegated to",saved.delegateTo||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
       else if(t==="discuss"){vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);vRow("Discuss with",saved.discussWith||"—",card);if(saved.notes)vRow("Notes",saved.notes,card);}
-      else if(t==="info"){vRow("Status","Informational — no action required",card);if(saved.notes)vRow("Notes",saved.notes,card);}
       else{vRow("Due date",fmtD(saved.dueDate),card);vRow("Importance",saved.importance?"P"+saved.importance:"—",card);if(saved.effort)vRow("Effort",saved.effort,card);if(saved.notes)vRow("Notes",saved.notes,card);}
       if(card.lastChild&&card.lastChild.style)card.lastChild.style.borderBottom="none";
       es.appendChild(card);
@@ -1346,7 +1345,7 @@
     document.getElementById("tabTiles").addEventListener("click",()=>{switchTab("Tiles");renderTiles();});
 
     // ── Keyboard shortcuts ────────────────────────────────────
-    const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated","5":"info"};
+    const typeKeys={"1":"task","2":"discuss","3":"waiting","4":"delegated"};
     document.addEventListener("keydown",e=>{
       // Alt+1/2/3 = tab switching (always active)
       if(e.altKey&&e.key==="1"){e.preventDefault();switchTab("Email");return;}
@@ -1357,8 +1356,8 @@
       if(tag==="INPUT"||tag==="TEXTAREA"||tag==="SELECT")return;
       const emailTab=document.getElementById("pEmail");
       if(!emailTab||!emailTab.classList.contains("active"))return;
-      // Key 6 = Archive (in new mode only)
-      if(e.key==="6"){
+      // Key 5 = Archive (in new mode only)
+      if(e.key==="5"){
         e.preventDefault();
         if(mode!=="new")return;
         if(currentEmailId && window.k92Graph){
