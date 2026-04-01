@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v17";
+    const AI_CACHE_VER="v18";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1068,7 +1068,12 @@
       var threadPromise=convId&&window.k92Graph&&window.k92Graph.getConversationMessages?window.k92Graph.getConversationMessages(convId):Promise.resolve([]);
       threadPromise.catch(()=>[]).then(msgs=>{
         function stripSig(text){return text.replace(/Regards[\s\S]{0,20}$/i,"").replace(/Kind regards[\s\S]{0,20}$/i,"").replace(/Thanks[\s\S]{0,20}$/i,"").replace(/WHAT K92 CARES ABOUT[\s\S]*/i,"").replace(/This e-mail transmission[\s\S]*/i,"").replace(/Kainantu Gold Mine[\s\S]*/i,"").replace(/Suite 488[\s\S]*/i,"").replace(/PO Box 1290[\s\S]*/i,"").replace(/Tel:[\s\S]{0,200}$/i,"").trim();}
-        var emailContent="Subject: "+currentEmailSubject+"\n\n";
+        var toList="",ccList="";
+        try{var item=Office.context.mailbox.item;if(item.to){item.to.forEach(function(r){toList+=(r.displayName||r.emailAddress)+"; ";});}if(item.cc){item.cc.forEach(function(r){ccList+=(r.displayName||r.emailAddress)+"; ";});}}catch(e){}
+        var emailContent="Subject: "+currentEmailSubject+"\n";
+        if(toList)emailContent+="TO: "+toList.trim()+"\n";
+        if(ccList)emailContent+="CC: "+ccList.trim()+"\n";
+        emailContent+="\n";
         if(msgs&&msgs.length>1){
           emailContent+="FULL EMAIL THREAD (oldest first):\n";
           msgs.forEach((m,i)=>{var body=stripSig(m.body).substring(0,500);emailContent+="--- Message "+(i+1)+" from "+m.from+" ---\n"+body+"\n\n";});
@@ -1127,7 +1132,7 @@
         var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#6B7280":"#3b82f6";
         function addField(label,value){
           var row=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
-          row.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"48px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:label}));
+          row.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"58px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:label}));
           row.appendChild(el("span",{fontSize:"11px",color:"#374151",wordBreak:"break-word"},{textContent:value}));
           p.appendChild(row);
         }
@@ -1136,7 +1141,7 @@
         // Render action as numbered list if array, otherwise single line
         var actions=Array.isArray(parsed.action)?parsed.action:[parsed.action];
         var actionRow=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
-        actionRow.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"48px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:"Action"}));
+        actionRow.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"58px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:"Action"}));
         var actionList=el("div",{fontSize:"11px",color:"#1a1a1a",wordBreak:"break-word",flex:"1"});
         actions.forEach(function(item,i){
           var line=el("div",{marginBottom:i<actions.length-1?"4px":"0"});
