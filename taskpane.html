@@ -1198,20 +1198,29 @@
       }
       container.appendChild(p);
       // Refresh + gear row
-      const aiRow=el("div",{display:"flex",justifyContent:"flex-end",gap:"10px",marginTop:"-6px",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif",fontSize:"9px"});
-      const refresh=el("span",{color:"#94a3b8",cursor:"pointer"},{textContent:"↻ Refresh AI"});
-      refresh.addEventListener("click",()=>{
+      var aiRow=el("div",{display:"flex",justifyContent:"flex-end",gap:"12px",marginTop:"-4px",marginBottom:"6px",fontFamily:"'Segoe UI',Arial,sans-serif",fontSize:"9px"});
+      function clearAiCacheForCurrent(){
         if(!currentEmailId)return;
-        delete aiCache[currentEmailId];saveAiCache();
+        // Cache key may be conversationId or emailId — clear both to be safe
+        delete aiCache[currentEmailId];
+        try{var cid=Office.context.mailbox.item.conversationId;if(cid)delete aiCache[cid];}catch(e){}
+        // Also brute-force: remove any entry whose emailId matches
+        Object.keys(aiCache).forEach(function(k){if(aiCache[k]&&aiCache[k].emailId===currentEmailId)delete aiCache[k];});
+        saveAiCache();
+      }
+      var refresh=el("span",{color:"#6B7280",cursor:"pointer",padding:"2px 4px",borderRadius:"3px",background:"#f3f4f6"},{textContent:"↻ Refresh AI"});
+      refresh.onclick=function(){
+        if(!currentEmailId)return;
+        clearAiCacheForCurrent();
         currentEmailPreview="Refreshing...";renderEmail();
         generateAiSummary(currentEmailId);
-      });
+      };
       aiRow.appendChild(refresh);
-      const gear=el("span",{color:"#94a3b8",cursor:"pointer"},{textContent:"⚙ Settings"});
-      gear.addEventListener("click",()=>{
-        const newKey=prompt("Anthropic API key (leave blank to clear):",getAiKey());
-        if(newKey!==null){setAiKey(newKey.trim());setStatus(newKey.trim()?"Key updated.":"Key cleared.",2000);if(newKey.trim()&&currentEmailId){delete aiCache[currentEmailId];saveAiCache();generateAiSummary(currentEmailId);}}
-      });
+      var gear=el("span",{color:"#6B7280",cursor:"pointer",padding:"2px 4px",borderRadius:"3px",background:"#f3f4f6"},{textContent:"⚙ Settings"});
+      gear.onclick=function(){
+        var newKey=prompt("Anthropic API key (leave blank to clear):",getAiKey());
+        if(newKey!==null){setAiKey(newKey.trim());setStatus(newKey.trim()?"Key updated.":"Key cleared.",2000);if(newKey.trim()&&currentEmailId){clearAiCacheForCurrent();generateAiSummary(currentEmailId);}}
+      };
       aiRow.appendChild(gear);
       container.appendChild(aiRow);
     }
