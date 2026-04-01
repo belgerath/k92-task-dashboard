@@ -1120,6 +1120,7 @@
     }
 
     let currentEmailBody="";
+    let currentEmailDate=null;
 
     function mkPreview(container){
       if(!getAiKey()){mkAiSetup(container);return;}
@@ -1130,8 +1131,10 @@
       if(!isLoading){try{parsed=JSON.parse(currentEmailPreview);}catch(e){parsed=null;}}
       var p;
       if(parsed&&parsed.action){
-        p=el("div",{fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"10px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px"});
-        var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#6B7280":"#3b82f6";
+        // Dynamic colours based on AI status
+        var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#D97706":"#3b82f6";
+        var previewBg=parsed.status==="action_needed"?"#FEF2F2":parsed.status==="waiting"?"#FFFBEB":"#f0f7ff";
+        p=el("div",{fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"10px 10px",background:previewBg,borderRadius:"8px",borderLeft:"3px solid "+statusColor,marginBottom:"10px"});
         function addField(label,value){
           var row=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
           row.appendChild(el("span",{fontSize:"10px",fontWeight:"700",color:"#667085",minWidth:"58px",textTransform:"uppercase",letterSpacing:"0.03em",flexShrink:"0"},{textContent:label}));
@@ -1153,11 +1156,23 @@
         actionRow.appendChild(actionList);
         p.appendChild(actionRow);
         if(parsed.summary)addField("Summary",parsed.summary);
+        // Bottom row: status badge + thread age
+        var bottomRow=el("div",{display:"flex",alignItems:"center",gap:"8px",marginTop:"6px"});
         if(parsed.status){
           var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":"Info only";
-          var badge=el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",marginTop:"4px",letterSpacing:"0.03em"},{textContent:statusLabel});
-          p.appendChild(badge);
+          bottomRow.appendChild(el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",letterSpacing:"0.03em"},{textContent:statusLabel}));
         }
+        if(currentEmailDate){
+          var ageMs=Date.now()-new Date(currentEmailDate).getTime();
+          var ageMins=Math.floor(ageMs/60000);
+          var ageText;
+          if(ageMins<1)ageText="Just now";
+          else if(ageMins<60)ageText=ageMins+"m ago";
+          else if(ageMins<1440)ageText=Math.floor(ageMins/60)+"h ago";
+          else{var days=Math.floor(ageMins/1440);ageText=days+(days===1?" day":" days")+" ago";}
+          bottomRow.appendChild(el("span",{fontSize:"9px",color:"#98a2b3",fontStyle:"italic"},{textContent:"Received "+ageText}));
+        }
+        p.appendChild(bottomRow);
       }else{
         p=el("div",{fontSize:"11px",color:isLoading?"#94a3b8":"#374151",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"8px 10px",background:"#f0f7ff",borderRadius:"8px",borderLeft:"3px solid #3b82f6",marginBottom:"10px",whiteSpace:"pre-wrap",wordBreak:"break-word",fontStyle:isLoading?"italic":"normal"},{textContent:currentEmailPreview});
       }
@@ -1436,7 +1451,7 @@
     function onItemChanged(){
       const item=Office.context.mailbox.item;
       if(!item){
-        currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";currentEmailBody="";
+        currentEmailSubject="Select an email to begin";currentEmailId=null;currentEmailPreview="";currentEmailBody="";currentEmailDate=null;
         document.getElementById("eSnip").textContent=currentEmailSubject;
         mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};currentTaskId=null;
         renderEmail();return;
@@ -1444,6 +1459,7 @@
       currentEmailSubject=item.subject||"No subject";
       currentEmailId=item.itemId;
       currentEmailPreview="";currentEmailBody="";
+      try{currentEmailDate=item.dateTimeCreated||null;}catch(e){currentEmailDate=null;}
       document.getElementById("eSnip").textContent=currentEmailSubject;
       // Check AI cache first (use conversationId as key for thread-level caching)
       var earlyConvId=null;
