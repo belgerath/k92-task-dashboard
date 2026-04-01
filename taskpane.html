@@ -1221,16 +1221,24 @@
       archBtn.dataset.type="archive";
       archBtn.addEventListener("click",()=>{
         if(currentEmailId && window.k92Graph){
-          setStatus("Archiving...",2000);
-          // Resolve conversationId via Graph API (not Office.js) to ensure correct format
-          var cidPromise=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          setStatus("Archiving...",5000);
+          var snapEid=currentEmailId;
+          // Try conversation-level archive, fall back to single-message
+          var cidPromise=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId).catch(e=>{console.log("resolveConvId err:",e);return null;}):Promise.resolve(null);
           cidPromise.then(cid=>{
-            var clearP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            // Clear categories (best effort)
+            var clearP=cid?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(snapEid,[]).catch(()=>{});
             return clearP.then(()=>{
-              if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
-              return window.k92Graph.archiveMessage(currentEmailId);
+              if(cid){
+                // Try conversation archive, fall back to single message on failure
+                return window.k92Graph.archiveConversation(cid).catch(convErr=>{
+                  console.log("Conversation archive failed, trying single message:",convErr);
+                  return window.k92Graph.archiveMessage(snapEid);
+                });
+              }
+              return window.k92Graph.archiveMessage(snapEid);
             });
-          }).then(()=>{setStatus("Conversation archived.",3000);}).catch(e=>{console.error("Archive failed:",e);setStatus("Archive failed.",3000);});
+          }).then(()=>{setStatus("Archived.",3000);}).catch(e=>{console.error("Archive failed:",e);setStatus("Archive error: "+(e.message||e),5000);});
         }
       });
       tg.appendChild(archBtn);
@@ -1263,18 +1271,19 @@
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...");
           // Resolve conversationId via Graph for reliable conversation-level operations
-          var cmpCidP=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          var cmpSnap=currentEmailId;
+          var cmpCidP=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId).catch(()=>null):Promise.resolve(null);
           cmpCidP.then(cid=>{
-            var clrP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            var clrP=cid?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(cmpSnap,[]).catch(()=>{});
             return clrP.then(()=>{
-              if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
-              return window.k92Graph.archiveMessage(currentEmailId);
+              if(cid){return window.k92Graph.archiveConversation(cid).catch(()=>window.k92Graph.archiveMessage(cmpSnap));}
+              return window.k92Graph.archiveMessage(cmpSnap);
             });
           }).then(()=>{
-            setStatus("Conversation archived.",3000);
+            setStatus("Archived.",3000);
           }).catch(e=>{
             console.error("Archive failed:",e);
-            setStatus("Completed — archive failed.",4000);
+            setStatus("Completed — archive error: "+(e.message||e),5000);
           });
         }
         if(currentTaskId!==null){
@@ -1383,14 +1392,15 @@
         if(mode!=="new")return;
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...",2000);
-          var cidP5=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          var snap5=currentEmailId;
+          var cidP5=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId).catch(()=>null):Promise.resolve(null);
           cidP5.then(cid5=>{
-            var clrP=cid5&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid5).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            var clrP=cid5?window.k92Graph.clearConversationCategories(cid5).catch(()=>{}):window.k92Graph.setCategories(snap5,[]).catch(()=>{});
             return clrP.then(()=>{
-              if(cid5&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid5);}
-              return window.k92Graph.archiveMessage(currentEmailId);
+              if(cid5){return window.k92Graph.archiveConversation(cid5).catch(()=>window.k92Graph.archiveMessage(snap5));}
+              return window.k92Graph.archiveMessage(snap5);
             });
-          }).then(()=>{setStatus("Conversation archived.",3000);}).catch(err=>{setStatus("Archive failed: "+err.message,3000);});
+          }).then(()=>{setStatus("Archived.",3000);}).catch(err=>{setStatus("Archive error: "+(err.message||err),5000);});
         }
         return;
       }
