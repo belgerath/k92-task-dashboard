@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v16";
+    const AI_CACHE_VER="v17";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1082,7 +1082,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:250,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of what Craig still needs to do. Use 'you' not Craig's name. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain: who requested what, who provided what, and where things stand now.\n- CRITICAL: Read ALL messages in the thread chronologically. If Craig ALREADY REPLIED or forwarded a response, he has acted. Look for messages FROM Craig — those show he already responded.\n- 'info_only': Craig has no remaining action — he already replied, or the message is just an acknowledgment (noted/thanks/received), or Craig is only CC'd.\n- 'action_needed': The latest message explicitly asks Craig to do something he has NOT yet done in the thread.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- FIRST CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop, regardless of what the email asks.\n- THEN CHECK: Did Craig already reply in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'info_only' or 'waiting'.\n- 'action_needed': ONLY if the email is addressed TO Craig AND explicitly asks him to do something he has NOT yet done.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
