@@ -1020,7 +1020,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v31";
+    const AI_CACHE_VER="v32";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1082,9 +1082,19 @@
         if(toList)emailContent+="TO: "+toList.trim()+"\n";
         if(ccList)emailContent+="CC: "+ccList.trim()+"\n";
         // Check if Craig already replied/forwarded (from Sent Items search)
+        // But only apply if the current email is OLDER than Craig's reply — if someone responded
+        // AFTER Craig's forward, Craig may have a new action needed.
         if(sentMsgs&&sentMsgs.length>0){
+          var sentDate=new Date(sentMsgs[0].sentDateTime);
+          var emailDate=currentEmailDate?new Date(currentEmailDate):null;
           var recipients=sentMsgs[0].toRecipients?sentMsgs[0].toRecipients.map(r=>r.emailAddress&&r.emailAddress.name||"").join(", "):"";
-          emailContent+="\n** CRAIG ALREADY REPLIED/FORWARDED ** Craig forwarded/replied to "+recipients+" on "+sentMsgs[0].sentDateTime+". Craig has delegated or responded — status MUST be 'waiting'. Action MUST be 'No action required' or 'Waiting on "+recipients+"'. Summary MUST mention Craig forwarded/delegated to "+recipients+". **\n";
+          if(!emailDate||emailDate<=sentDate){
+            // Current email is older than or same as Craig's reply — Craig already acted
+            emailContent+="\n** CRAIG ALREADY REPLIED/FORWARDED ** Craig forwarded/replied to "+recipients+" on "+sentMsgs[0].sentDateTime+". Craig has delegated or responded — status MUST be 'waiting'. Action MUST be 'No action required' or 'Waiting on "+recipients+"'. Summary MUST mention Craig forwarded/delegated to "+recipients+". **\n";
+          }else{
+            // Someone replied AFTER Craig's forward — Craig may need to act again
+            emailContent+="\nNote: Craig previously forwarded this to "+recipients+" on "+sentMsgs[0].sentDateTime+", but someone has since replied. Assess whether Craig now has a new action based on the latest email content.\n";
+          }
         }
         emailContent+="\n";
         if(msgs&&msgs.length>1){
