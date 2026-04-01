@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v13";
+    const AI_CACHE_VER="v14";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1057,8 +1057,8 @@
       var convId=null;
       try{convId=Office.context.mailbox.item.conversationId||null;}catch(e){}
       var cacheKey=convId||emailId;
-      // Check cache (valid for 24 hours)
-      if(aiCache[cacheKey]&&(Date.now()-aiCache[cacheKey].timestamp<86400000)){
+      // Check cache (valid for 24 hours AND same email — refresh when thread grows)
+      if(aiCache[cacheKey]&&(Date.now()-aiCache[cacheKey].timestamp<86400000)&&aiCache[cacheKey].emailId===emailId){
         currentEmailPreview=aiCache[cacheKey].summary;
         renderEmail();return;
       }
@@ -1098,7 +1098,7 @@
           try{var jsonStr=raw.replace(/^[^{]*/, '').replace(/[^}]*$/, '');parsed=JSON.parse(jsonStr);}catch(e){parsed=null;}
           var summaryData=parsed&&parsed.action?JSON.stringify(parsed):raw;
           currentEmailPreview=summaryData;
-          aiCache[cacheKey]={summary:summaryData,timestamp:Date.now()};
+          aiCache[cacheKey]={summary:summaryData,timestamp:Date.now(),emailId:emailId};
           saveAiCache();
         }else{
           currentEmailPreview="Could not generate summary.";
