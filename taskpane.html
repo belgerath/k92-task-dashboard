@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v19";
+    const AI_CACHE_VER="v20";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1068,9 +1068,10 @@
       var threadPromise=convId&&window.k92Graph&&window.k92Graph.getConversationMessages?window.k92Graph.getConversationMessages(convId):Promise.resolve([]);
       threadPromise.catch(()=>[]).then(msgs=>{
         function stripSig(text){return text.replace(/Regards[\s\S]{0,20}$/i,"").replace(/Kind regards[\s\S]{0,20}$/i,"").replace(/Thanks[\s\S]{0,20}$/i,"").replace(/WHAT K92 CARES ABOUT[\s\S]*/i,"").replace(/This e-mail transmission[\s\S]*/i,"").replace(/Kainantu Gold Mine[\s\S]*/i,"").replace(/Suite 488[\s\S]*/i,"").replace(/PO Box 1290[\s\S]*/i,"").replace(/Tel:[\s\S]{0,200}$/i,"").trim();}
-        var toList="",ccList="";
-        try{var item=Office.context.mailbox.item;if(item.to){item.to.forEach(function(r){toList+=(r.displayName||r.emailAddress)+"; ";});}if(item.cc){item.cc.forEach(function(r){ccList+=(r.displayName||r.emailAddress)+"; ";});}}catch(e){}
+        var toList="",ccList="",fromAddr="";
+        try{var item=Office.context.mailbox.item;if(item.from){fromAddr=(item.from.displayName||"")+" <"+(item.from.emailAddress||"")+">";}if(item.to){item.to.forEach(function(r){toList+=(r.displayName||"")+" <"+(r.emailAddress||"")+">; ";});}if(item.cc){item.cc.forEach(function(r){ccList+=(r.displayName||"")+" <"+(r.emailAddress||"")+">; ";});}}catch(e){}
         var emailContent="Subject: "+currentEmailSubject+"\n";
+        if(fromAddr)emailContent+="FROM: "+fromAddr+"\n";
         if(toList)emailContent+="TO: "+toList.trim()+"\n";
         if(ccList)emailContent+="CC: "+ccList.trim()+"\n";
         emailContent+="\n";
@@ -1087,7 +1088,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:250,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to' and 'from': first name only if they work at K92 Mining (any @k92mining.com address including k92shipping). If external to K92, add company name in brackets, e.g. 'Niyant (Trafigura)', 'Laura (Tundra)'. Use the primary TO recipient, not CC.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- FIRST CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop, regardless of what the email asks.\n- THEN CHECK: Did Craig already reply in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'info_only' or 'waiting'.\n- 'action_needed': ONLY if the email is addressed TO Craig AND explicitly asks him to do something he has NOT yet done.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to' and 'from': Use full name (first and last). Check the email address to determine if internal or external. Any @k92mining.com or @k92shipping address = K92 internal, show name only. External = add company in brackets, e.g. 'Niyant Thakar (Trafigura)', 'Laura Smith (Tundra)'. Use the primary TO recipient, not CC.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- FIRST CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop, regardless of what the email asks.\n- THEN CHECK: Did Craig already reply in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'info_only' or 'waiting'.\n- 'action_needed': ONLY if the email is addressed TO Craig AND explicitly asks him to do something he has NOT yet done.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
