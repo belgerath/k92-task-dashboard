@@ -523,21 +523,22 @@
       });
       const cb=el("button",{fontSize:"10px",padding:"4px 10px",borderRadius:"6px",cursor:"pointer",fontWeight:"600",border:"1px solid #9FE1CB",background:"#E1F5EE",color:"#085041",fontFamily:"'Segoe UI',Arial,sans-serif",boxShadow:"0 1px 2px rgba(0,0,0,0.04)"},{textContent:"✓ Complete"});
       cb.addEventListener("click",()=>{
-        // Use Graph API to clear categories and archive
+        // Use Graph API to clear categories and archive entire conversation
         if(t.emailId && window.k92Graph){
-          window.k92Graph.setCategories(t.emailId,[]).then(()=>{
-            return window.k92Graph.archiveMessage(t.emailId);
+          var cmpCid=t.conversationId;
+          var cmpP=cmpCid?Promise.resolve(cmpCid):(window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(t.emailId):Promise.resolve(null));
+          cmpP.then(cid=>{
+            var clrP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(t.emailId,[]).catch(()=>{});
+            return clrP.then(()=>{
+              if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
+              return window.k92Graph.archiveMessage(t.emailId);
+            });
           }).catch(e=>{
             console.error("Graph complete failed:",e);
-            if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
-              (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
-              removeOutlookColour();
-            } else { addPending(t.emailId); }
+            if(t.emailId){ addPending(t.emailId); }
           });
-        } else if(Office.context.mailbox.item && (t.emailId===currentEmailId ||
-          (t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId))){
-          removeOutlookColour();
-        } else if(t.emailId){ addPending(t.emailId); }
+        }
+        if(Office.context.mailbox.item && t.emailId===currentEmailId){ removeOutlookColour(); }
         logCompletion(t);
         if(!t.recurring){removeTask(t.id);}
         if(t.id===currentTaskId){currentTaskId=null;mode="new";form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};renderEmail();}
@@ -1019,7 +1020,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v20";
+    const AI_CACHE_VER="v21";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1088,7 +1089,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:250,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to' and 'from': Use full name (first and last). Check the email address to determine if internal or external. Any @k92mining.com or @k92shipping address = K92 internal, show name only. External = add company in brackets, e.g. 'Niyant Thakar (Trafigura)', 'Laura Smith (Tundra)'. Use the primary TO recipient, not CC.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- FIRST CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop, regardless of what the email asks.\n- THEN CHECK: Did Craig already reply in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'info_only' or 'waiting'.\n- 'action_needed': ONLY if the email is addressed TO Craig AND explicitly asks him to do something he has NOT yet done.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': The person/people the LATEST email was addressed TO (from the TO line, NOT from or CC). Use full name (first and last). If the email is TO Craig Cook, put 'Craig Cook'. Never put the sender's name here.\n- 'from': The person who SENT the latest email (from the FROM line). Use full name (first and last). Never repeat the TO name here.\n- For both 'to' and 'from': Check the email address domain. Any @k92mining.com or @k92shipping.com = K92 internal, show name only. External = add company in brackets, e.g. 'Niyant Thakar (Trafigura)'. If multiple TO recipients, show the first one.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- FIRST CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop, regardless of what the email asks.\n- THEN CHECK: Did Craig already reply in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'info_only' or 'waiting'.\n- 'action_needed': ONLY if the email is addressed TO Craig AND explicitly asks him to do something he has NOT yet done.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1221,11 +1222,14 @@
       archBtn.addEventListener("click",()=>{
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...",2000);
-          var cid=null;try{cid=Office.context.mailbox.item.conversationId;}catch(e){}
-          var clearP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]);
-          clearP.then(()=>{
-            if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
-            return window.k92Graph.archiveMessage(currentEmailId);
+          // Resolve conversationId via Graph API (not Office.js) to ensure correct format
+          var cidPromise=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          cidPromise.then(cid=>{
+            var clearP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            return clearP.then(()=>{
+              if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
+              return window.k92Graph.archiveMessage(currentEmailId);
+            });
           }).then(()=>{setStatus("Conversation archived.",3000);}).catch(e=>{console.error("Archive failed:",e);setStatus("Archive failed.",3000);});
         }
       });
@@ -1258,10 +1262,16 @@
         removeOutlookColour();
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...");
-          window.k92Graph.setCategories(currentEmailId,[]).then(()=>{
-            return window.k92Graph.archiveMessage(currentEmailId);
+          // Resolve conversationId via Graph for reliable conversation-level operations
+          var cmpCidP=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          cmpCidP.then(cid=>{
+            var clrP=cid&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            return clrP.then(()=>{
+              if(cid&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid);}
+              return window.k92Graph.archiveMessage(currentEmailId);
+            });
           }).then(()=>{
-            setStatus("Archived.",3000);
+            setStatus("Conversation archived.",3000);
           }).catch(e=>{
             console.error("Archive failed:",e);
             setStatus("Completed — archive failed.",4000);
@@ -1373,11 +1383,13 @@
         if(mode!=="new")return;
         if(currentEmailId && window.k92Graph){
           setStatus("Archiving...",2000);
-          var cid5=null;try{cid5=Office.context.mailbox.item.conversationId;}catch(e){}
-          var clrP=cid5&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid5).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]);
-          clrP.then(()=>{
-            if(cid5&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid5);}
-            return window.k92Graph.archiveMessage(currentEmailId);
+          var cidP5=window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+          cidP5.then(cid5=>{
+            var clrP=cid5&&window.k92Graph.clearConversationCategories?window.k92Graph.clearConversationCategories(cid5).catch(()=>{}):window.k92Graph.setCategories(currentEmailId,[]).catch(()=>{});
+            return clrP.then(()=>{
+              if(cid5&&window.k92Graph.archiveConversation){return window.k92Graph.archiveConversation(cid5);}
+              return window.k92Graph.archiveMessage(currentEmailId);
+            });
           }).then(()=>{setStatus("Conversation archived.",3000);}).catch(err=>{setStatus("Archive failed: "+err.message,3000);});
         }
         return;
@@ -1445,19 +1457,18 @@
           removePending(currentEmailId);
         });
       }
+      // Try matching task by emailId first (instant), then by conversationId
       var curConvId=null;try{curConvId=Office.context.mailbox.item.conversationId||null;}catch(e){}
-      const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
+      var existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
         (curConvId?tasks.find(t=>t.conversationId&&t.conversationId===curConvId):null);
-      if(existingTask){
+      // Helper to handle a matched task
+      function handleMatchedTask(matchedTask){
         // Auto-clear Waiting tasks when a reply arrives from someone else
         var userEmail="";try{userEmail=(Office.context.mailbox.userProfile.emailAddress||"").toLowerCase();}catch(e){}
-        var fromEmail="";try{var f=item.from;fromEmail=f&&f.emailAddress?(f.emailAddress.address||"").toLowerCase():"";}catch(e){}
-        if(existingTask.type==="waiting"&&userEmail&&fromEmail&&fromEmail!==userEmail&&existingTask.emailId!==currentEmailId){
-          // Someone else replied to a conversation we were waiting on — clear the waiting task
-          tasks.splice(tasks.indexOf(existingTask),1);saveTasks();
-          // Clear Outlook categories from conversation
-          var cid=null;try{cid=Office.context.mailbox.item.conversationId;}catch(e){}
-          if(cid&&window.k92Graph){window.k92Graph.clearConversationCategories(cid).catch(e=>console.log("Clear cat error:",e));}
+        var fromEmail="";try{var f=item.from;fromEmail=f&&f.emailAddress?(f.emailAddress).toLowerCase():"";}catch(e){}
+        if(matchedTask.type==="waiting"&&userEmail&&fromEmail&&fromEmail!==userEmail&&matchedTask.emailId!==currentEmailId){
+          tasks.splice(tasks.indexOf(matchedTask),1);saveTasks();
+          if(matchedTask.conversationId&&window.k92Graph){window.k92Graph.clearConversationCategories(matchedTask.conversationId).catch(e=>console.log("Clear cat error:",e));}
           Office.context.mailbox.item.categories.removeAsync(["Waiting"],function(){});
           currentTaskId=null;mode="new";
           form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
@@ -1465,40 +1476,50 @@
           renderEmail();renderDash();
           return;
         }
-        currentTaskId=existingTask.id;
-        saved={type:existingTask.type,effort:existingTask.effort||"",importance:existingTask.importance||null,dueDate:existingTask.dueDate||"",delegateTo:existingTask.delegateTo||"",waitingWho:existingTask.waitingWho||"",discussWith:existingTask.discussWith||"",notes:existingTask.notes||""};
+        currentTaskId=matchedTask.id;
+        saved={type:matchedTask.type,effort:matchedTask.effort||"",importance:matchedTask.importance||null,dueDate:matchedTask.dueDate||"",delegateTo:matchedTask.delegateTo||"",waitingWho:matchedTask.waitingWho||"",discussWith:matchedTask.discussWith||"",notes:matchedTask.notes||""};
         mode="view";
-        // If matched via conversation (not exact email), apply colour to current email too
-        if(existingTask.emailId!==currentEmailId){ applyOutlookColour(existingTask); }
+        if(matchedTask.emailId!==currentEmailId){ applyOutlookColour(matchedTask); }
+        renderEmail();
+      }
+      if(existingTask){
+        handleMatchedTask(existingTask);
       } else {
-        currentTaskId=null;mode="new";
-        form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
-        // Auto-detect manually applied Outlook categories and create a task
-        // Capture state at call time to prevent race condition during rapid email switching
-        const snapEmailId=currentEmailId;
-        const snapSubject=currentEmailSubject;
-        Office.context.mailbox.item.categories.getAsync(catResult=>{
-          // Bail if user has already switched to a different email
-          if(currentEmailId!==snapEmailId){return;}
-          if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
-          const catNames=catResult.value.map(c=>c.displayName);
-          const catMap={"High":"task","MedHigh":"task","MedLow":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
-          const found=catNames.find(n=>catMap[n]);
-          if(!found){renderEmail();return;}
-          const type=catMap[found];
-          const defaultImp=found==="High"?4:found==="MedHigh"?3:found==="MedLow"?2:found==="Med"?2:1;
-          const defaultDays=found==="High"?2:found==="MedHigh"?5:(found==="MedLow"||found==="Med")?7:14;
-          const due=new Date(localToday().getTime()+defaultDays*864e5);
-          const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
-          const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",discussWith:"",notes:"",id:nid++,emailId:snapEmailId};
-          try{autoTask.conversationId=Office.context.mailbox.item.conversationId||null;}catch(e){autoTask.conversationId=null;}
-          try{const f=Office.context.mailbox.item.from;autoTask.sender=f&&f.displayName?f.displayName:"";}catch(e){autoTask.sender="";}
-          tasks.push(autoTask);saveTasks();
-          currentTaskId=autoTask.id;
-          saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",discussWith:"",notes:""};
-          mode="view";renderEmail();renderDash();
-          setStatus("Task auto-created from email category.",3000);
-          return;
+        // Sync match failed — try resolving conversationId via Graph API
+        // (Office.js may return EWS-format conversationId that doesn't match Graph-format stored in tasks)
+        const snapId=currentEmailId;
+        var graphCidP=window.k92Graph&&window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
+        graphCidP.then(graphConvId=>{
+          if(currentEmailId!==snapId)return; // user switched emails
+          if(graphConvId){
+            var graphMatch=tasks.find(t=>t.conversationId&&t.conversationId===graphConvId);
+            if(graphMatch){handleMatchedTask(graphMatch);return;}
+          }
+          // No task found — fall through to category auto-detect / new mode
+          currentTaskId=null;mode="new";
+          form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
+          const snapSubject=currentEmailSubject;
+          Office.context.mailbox.item.categories.getAsync(catResult=>{
+            if(currentEmailId!==snapId){return;}
+            if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
+            const catNames=catResult.value.map(c=>c.displayName);
+            const catMap={"High":"task","MedHigh":"task","MedLow":"task","Med":"task","Low":"task","Discuss":"discuss","Waiting":"waiting","Delegate":"delegated"};
+            const found=catNames.find(n=>catMap[n]);
+            if(!found){renderEmail();return;}
+            const type=catMap[found];
+            const defaultImp=found==="High"?4:found==="MedHigh"?3:found==="MedLow"?2:found==="Med"?2:1;
+            const defaultDays=found==="High"?2:found==="MedHigh"?5:(found==="MedLow"||found==="Med")?7:14;
+            const due=new Date(localToday().getTime()+defaultDays*864e5);
+            const dueStr=due.getFullYear()+"-"+String(due.getMonth()+1).padStart(2,"0")+"-"+String(due.getDate()).padStart(2,"0");
+            const autoTask={title:snapSubject,days:defaultDays,dueDate:dueStr,type:type,effort:"",importance:defaultImp,who:"",delegateTo:"",waitingWho:"",discussWith:"",notes:"",id:nid++,emailId:snapId};
+            autoTask.conversationId=graphConvId||null;
+            try{const f=Office.context.mailbox.item.from;autoTask.sender=f&&f.displayName?f.displayName:"";}catch(e){autoTask.sender="";}
+            tasks.push(autoTask);saveTasks();
+            currentTaskId=autoTask.id;
+            saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",discussWith:"",notes:""};
+            mode="view";renderEmail();renderDash();
+            setStatus("Task auto-created from email category.",3000);
+            return;
         });
         return; // wait for async category check
       }
