@@ -1488,17 +1488,12 @@
         // Sync match failed — try resolving conversationId via Graph API
         // (Office.js may return EWS-format conversationId that doesn't match Graph-format stored in tasks)
         const snapId=currentEmailId;
-        var graphCidP=window.k92Graph&&window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId):Promise.resolve(null);
-        graphCidP.then(graphConvId=>{
-          if(currentEmailId!==snapId)return; // user switched emails
-          if(graphConvId){
-            var graphMatch=tasks.find(t=>t.conversationId&&t.conversationId===graphConvId);
-            if(graphMatch){handleMatchedTask(graphMatch);return;}
-          }
-          // No task found — fall through to category auto-detect / new mode
+        // Helper: check categories and auto-create task or render new mode
+        function checkCategoriesAndRender(graphConvId){
           currentTaskId=null;mode="new";
           form={type:"",effort:"",importance:null,dueDate:"",delegateTo:"",waitingWho:"",discussWith:"",notes:""};saved={};
           const snapSubject=currentEmailSubject;
+          try{
           Office.context.mailbox.item.categories.getAsync(catResult=>{
             if(currentEmailId!==snapId){return;}
             if(catResult.status!==Office.AsyncResultStatus.Succeeded||!catResult.value||catResult.value.length===0){renderEmail();return;}
@@ -1519,9 +1514,23 @@
             saved={type:type,effort:"",importance:autoTask.importance,dueDate:dueStr,delegateTo:"",waitingWho:"",discussWith:"",notes:""};
             mode="view";renderEmail();renderDash();
             setStatus("Task auto-created from email category.",3000);
-            return;
+          });
+          }catch(e){renderEmail();}
+        }
+        // Try resolving conversationId via Graph (async) for better matching
+        var graphCidP=window.k92Graph&&window.k92Graph.resolveConversationId?window.k92Graph.resolveConversationId(currentEmailId).catch(()=>null):Promise.resolve(null);
+        graphCidP.then(graphConvId=>{
+          if(currentEmailId!==snapId)return;
+          if(graphConvId){
+            var graphMatch=tasks.find(t=>t.conversationId&&t.conversationId===graphConvId);
+            if(graphMatch){handleMatchedTask(graphMatch);return;}
+          }
+          checkCategoriesAndRender(graphConvId);
+        }).catch(()=>{
+          if(currentEmailId!==snapId)return;
+          checkCategoriesAndRender(null);
         });
-        return; // wait for async category check
+        return; // wait for async resolution
       }
       renderEmail();
     }
