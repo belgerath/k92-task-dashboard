@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v14";
+    const AI_CACHE_VER="v15";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1081,8 +1081,8 @@
           headers:{"Content-Type":"application/json","x-api-key":key,"anthropic-version":"2023-06-01","anthropic-dangerous-direct-browser-access":"true"},
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
-            max_tokens:200,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\",\"item 2\"],\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of specific action items based on what Craig still needs to do. Use 'you' not Craig's name.\n- CRITICAL: Focus on the MOST RECENT message to determine status and what Craig needs to do next.\n- 'info_only': ONLY when Craig has NO remaining action. E.g. someone just says 'noted/thanks/received' with nothing for Craig to do.\n- 'action_needed': When Craig must still act — including giving final approval, reviewing, signing off, or responding. If someone sends Craig a completed review for his approval, that is action_needed.\n- 'waiting': When Craig is waiting on someone else to complete something.\n- If email is TO someone else and Craig is only CC'd with no action requested of him, use 'info_only'.\n- Return ONLY the JSON object, no other text",
+            max_tokens:250,
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of what Craig still needs to do. Use 'you' not Craig's name.\n- 'summary': one sentence describing what the thread is about.\n- CRITICAL: Check if Craig ALREADY REPLIED in the thread. If Craig's message is the most recent, or if Craig already responded to the request, he has likely already acted.\n- 'info_only': Craig has no remaining action — he already replied, or the message is just an acknowledgment (noted/thanks/received), or Craig is only CC'd.\n- 'action_needed': The latest message explicitly asks Craig to do something he has NOT yet done in the thread.\n- 'waiting': Craig acted and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1145,6 +1145,7 @@
         });
         actionRow.appendChild(actionList);
         p.appendChild(actionRow);
+        if(parsed.summary)addField("Summary",parsed.summary);
         if(parsed.status){
           var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":"Info only";
           var badge=el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",marginTop:"4px",letterSpacing:"0.03em"},{textContent:statusLabel});
