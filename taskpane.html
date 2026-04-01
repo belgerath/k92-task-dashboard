@@ -1019,7 +1019,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v11";
+    const AI_CACHE_VER="v12";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1082,7 +1082,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:200,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\",\"item 2\"],\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of specific action items. Each item is one clear task. Use 'you' not Craig's name. If Craig already replied, say what remains.\n- 'status': ONLY 'action_needed' if Craig personally must act. If email is TO someone else and Craig is just CC'd, use 'info_only'. If awaiting others, use 'waiting'.\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\",\"item 2\"],\"status\":\"waiting|action_needed|info_only\"}\n\nRules:\n- 'to': first name only of the primary recipient (the To field, not CC)\n- 'from': first name only. If external to K92, add first word of company in brackets, e.g. 'Laura (Tundra)'\n- 'action': array of specific action items based on what Craig still needs to do. Use 'you' not Craig's name.\n- CRITICAL: Focus on the MOST RECENT message to determine status. If the latest message is just an acknowledgment (e.g. 'noted', 'thanks', 'received', 'approved', 'will do'), status is 'info_only' and action should say 'No action required — acknowledgment only'.\n- 'status': ONLY 'action_needed' if the latest message asks Craig to do something he hasn't done yet. If Craig already acted and the reply is just confirming, use 'info_only'. If email is TO someone else and Craig is CC'd, use 'info_only'. If awaiting others, use 'waiting'.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
