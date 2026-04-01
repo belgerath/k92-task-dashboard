@@ -1020,7 +1020,7 @@
     }
 
     // AI email summary cache: { emailId: { summary, timestamp } } — versioned to bust stale prompts
-    const AI_CACHE_VER="v32";
+    const AI_CACHE_VER="v33";
     var aiCache=(localStorage.getItem("k92aiCacheVer")===AI_CACHE_VER)?JSON.parse(localStorage.getItem("k92aiCache")||"{}"):{};
     localStorage.setItem("k92aiCacheVer",AI_CACHE_VER);
     function saveAiCache(){ localStorage.setItem("k92aiCache",JSON.stringify(aiCache)); }
@@ -1110,7 +1110,7 @@
           body:JSON.stringify({
             model:"claude-haiku-4-5-20251001",
             max_tokens:250,
-            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Today is "+dateStr(localToday())+". Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only\",\"deadline\":\"YYYY-MM-DD or null\"}\n\nRules:\n- 'to': The person/people the LATEST email was addressed TO (from the TO line, NOT from or CC). Use full name (first and last). If the email is TO Craig Cook, put 'Craig Cook'. Never put the sender's name here.\n- 'from': The person who SENT the latest email (from the FROM line). Use full name (first and last). Never repeat the TO name here.\n- For both 'to' and 'from': Check the email address domain. Any @k92mining.com or @k92shipping.com = K92 internal, show name only. External = add company in brackets, e.g. 'Niyant Thakar (Trafigura)'. If multiple TO recipients, show the first one.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- 'deadline': If the email mentions a deadline, due date, or time constraint (e.g. 'by Friday', 'end of month', 'before the board meeting on April 15', 'ASAP', 'urgent'), return the date as YYYY-MM-DD. 'ASAP'/'urgent'/'today' = today's date. 'End of week' = next Friday. 'End of month' = last day of current month. If no deadline is mentioned, return null.\n- FIRST CHECK: Is the latest email FROM Craig (ccook@k92mining.com)? If yes, Craig already acted — status MUST be 'waiting'. He sent/forwarded/replied, so he is waiting on the recipient. Never say 'action_needed' for an email Craig sent.\n- SECOND CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop.\n- THIRD CHECK: Did Craig already reply earlier in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'waiting'.\n- FOURTH CHECK (HIGHEST PRIORITY): If the email content contains '** CRAIG ALREADY REPLIED/FORWARDED **', Craig has already acted by forwarding or replying. Status MUST be 'waiting', NEVER 'action_needed' or 'info_only'. Action MUST say 'No action required' or 'Waiting on [recipient name]'. Summary MUST mention Craig forwarded/delegated to the named recipient. This OVERRIDES all other checks.\n- 'action_needed': ONLY if the email is FROM someone else, addressed TO Craig, AND explicitly asks him to do something he has NOT yet done, AND Craig has NOT already replied or forwarded it.\n- 'waiting': Craig acted (sent, replied, forwarded, or delegated) and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
+            system:"Analyse this email for Craig Cook (ccook@k92mining.com, CFO of K92 Mining). Today is "+dateStr(localToday())+". Return ONLY valid JSON:\n{\"to\":\"name\",\"from\":\"name\",\"action\":[\"item 1\"],\"summary\":\"one line context\",\"status\":\"waiting|action_needed|info_only|spam\",\"deadline\":\"YYYY-MM-DD or null\"}\n\nRules:\n- 'to': The person/people the LATEST email was addressed TO (from the TO line, NOT from or CC). Use full name (first and last). If the email is TO Craig Cook, put 'Craig Cook'. Never put the sender's name here.\n- 'from': The person who SENT the latest email (from the FROM line). Use full name (first and last). Never repeat the TO name here.\n- For both 'to' and 'from': Check the email address domain. Any @k92mining.com or @k92shipping.com = K92 internal, show name only. External = add company in brackets, e.g. 'Niyant Thakar (Trafigura)'. If multiple TO recipients, show the first one.\n- 'action': array of what Craig still needs to do. If nothing remains, say 'No action required'.\n- 'summary': one sentence capturing the full chain.\n- 'deadline': If the email mentions a deadline, due date, or time constraint (e.g. 'by Friday', 'end of month', 'before the board meeting on April 15', 'ASAP', 'urgent'), return the date as YYYY-MM-DD. 'ASAP'/'urgent'/'today' = today's date. 'End of week' = next Friday. 'End of month' = last day of current month. If no deadline is mentioned, return null.\n- FIRST CHECK: Is the latest email FROM Craig (ccook@k92mining.com)? If yes, Craig already acted — status MUST be 'waiting'. He sent/forwarded/replied, so he is waiting on the recipient. Never say 'action_needed' for an email Craig sent.\n- SECOND CHECK: Is the email TO someone other than Craig (Craig is only on CC/BCC)? If yes, status MUST be 'info_only' — Craig is just being kept in the loop.\n- THIRD CHECK: Did Craig already reply earlier in the thread? Look for messages FROM Craig/ccook. If Craig already responded, status is 'waiting'.\n- FOURTH CHECK (HIGHEST PRIORITY): If the email content contains '** CRAIG ALREADY REPLIED/FORWARDED **', Craig has already acted by forwarding or replying. Status MUST be 'waiting', NEVER 'action_needed' or 'info_only'. Action MUST say 'No action required' or 'Waiting on [recipient name]'. Summary MUST mention Craig forwarded/delegated to the named recipient. This OVERRIDES all other checks.\n- 'spam': Promotional emails, marketing newsletters, automated notifications, vendor ads, 'recommended for you' emails, subscription offers, or any mass-sent commercial email not specifically about K92 business. These are NOT info_only — they are spam.\n- 'action_needed': ONLY if the email is FROM someone else, addressed TO Craig, AND explicitly asks him to do something he has NOT yet done, AND Craig has NOT already replied or forwarded it.\n- 'waiting': Craig acted (sent, replied, forwarded, or delegated) and is now waiting on someone else.\n- Return ONLY the JSON object, no other text",
             messages:[{role:"user",content:emailContent}]
           })
         });
@@ -1155,8 +1155,8 @@
       var p;
       if(parsed&&parsed.action){
         // Dynamic colours based on AI status
-        var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#D97706":"#3b82f6";
-        var previewBg=parsed.status==="action_needed"?"#FEF2F2":parsed.status==="waiting"?"#FFFBEB":"#f0f7ff";
+        var statusColor=parsed.status==="action_needed"?"#DC2626":parsed.status==="waiting"?"#D97706":parsed.status==="spam"?"#9CA3AF":"#3b82f6";
+        var previewBg=parsed.status==="action_needed"?"#FEF2F2":parsed.status==="waiting"?"#FFFBEB":parsed.status==="spam"?"#F9FAFB":"#f0f7ff";
         p=el("div",{fontSize:"11px",fontFamily:"'Segoe UI',Arial,sans-serif",lineHeight:"1.5",padding:"10px 10px",background:previewBg,borderRadius:"8px",borderLeft:"3px solid "+statusColor,marginBottom:"10px"});
         function addField(label,value){
           var row=el("div",{display:"flex",marginBottom:"3px",gap:"6px"});
@@ -1192,7 +1192,7 @@
         // Bottom row: status badge + thread age
         var bottomRow=el("div",{display:"flex",alignItems:"center",gap:"8px",marginTop:"6px"});
         if(parsed.status){
-          var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":"Info only";
+          var statusLabel=parsed.status==="action_needed"?"Action needed":parsed.status==="waiting"?"Waiting":parsed.status==="spam"?"Spam":"Info only";
           bottomRow.appendChild(el("span",{display:"inline-block",fontSize:"9px",fontWeight:"700",padding:"2px 6px",borderRadius:"4px",background:statusColor,color:"#fff",letterSpacing:"0.03em"},{textContent:statusLabel}));
         }
         if(currentEmailAttachments>0){
@@ -1250,7 +1250,7 @@
       document.getElementById("eSnip").textContent=currentEmailSubject;
       // Check if info_only — render compact mode
       var isInfoOnly=false;
-      if(!form.type&&currentEmailPreview){try{var chk=JSON.parse(currentEmailPreview);isInfoOnly=chk.status==="info_only";}catch(e){}}
+      if(!form.type&&currentEmailPreview){try{var chk=JSON.parse(currentEmailPreview);isInfoOnly=chk.status==="info_only"||chk.status==="spam";}catch(e){}}
       if(isInfoOnly){
         mkPreview(es);
         // Prominent archive button
