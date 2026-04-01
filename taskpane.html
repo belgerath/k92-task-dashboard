@@ -1445,8 +1445,9 @@
           removePending(currentEmailId);
         });
       }
+      var curConvId=null;try{curConvId=Office.context.mailbox.item.conversationId||null;}catch(e){}
       const existingTask=tasks.find(t=>t.emailId===currentEmailId) ||
-        tasks.find(t=>t.conversationId && Office.context.mailbox.item.conversationId && t.conversationId===Office.context.mailbox.item.conversationId);
+        (curConvId?tasks.find(t=>t.conversationId&&t.conversationId===curConvId):null);
       if(existingTask){
         // Auto-clear Waiting tasks when a reply arrives from someone else
         var userEmail="";try{userEmail=(Office.context.mailbox.userProfile.emailAddress||"").toLowerCase();}catch(e){}
