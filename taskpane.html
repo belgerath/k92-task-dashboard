@@ -1067,8 +1067,13 @@
       renderEmail();
       // Get full conversation thread AND check Sent Items for replies/forwards
       var threadPromise=convId&&window.k92Graph&&window.k92Graph.getConversationMessages?window.k92Graph.getConversationMessages(convId):Promise.resolve([]);
-      var sentPromise=window.k92Graph&&window.k92Graph.checkSentReplies?window.k92Graph.checkSentReplies(currentEmailSubject).catch(()=>[]):Promise.resolve([]);
-      Promise.all([threadPromise.catch(()=>[]),sentPromise]).then(([msgs,sentMsgs])=>{
+      var sentPromise=window.k92Graph&&window.k92Graph.checkSentReplies?window.k92Graph.checkSentReplies(currentEmailSubject).catch(e=>({results:[],debug:"call error: "+e})):Promise.resolve({results:[],debug:"no graph"});
+      Promise.all([threadPromise.catch(()=>[]),sentPromise]).then(([msgs,sentData])=>{
+        // Unwrap sent items: support both old array format and new debug format
+        var sentMsgs=Array.isArray(sentData)?sentData:(sentData&&sentData.results?sentData.results:[]);
+        var sentDebug=sentData&&sentData.debug?sentData.debug:"";
+        sentItemsDebug=sentDebug;
+        console.log("SentItems debug:",sentDebug);
         function stripSig(text){return text.replace(/Regards[\s\S]{0,20}$/i,"").replace(/Kind regards[\s\S]{0,20}$/i,"").replace(/Thanks[\s\S]{0,20}$/i,"").replace(/WHAT K92 CARES ABOUT[\s\S]*/i,"").replace(/This e-mail transmission[\s\S]*/i,"").replace(/Kainantu Gold Mine[\s\S]*/i,"").replace(/Suite 488[\s\S]*/i,"").replace(/PO Box 1290[\s\S]*/i,"").replace(/Tel:[\s\S]{0,200}$/i,"").trim();}
         var toList="",ccList="",fromAddr="";
         try{var item=Office.context.mailbox.item;if(item.from){fromAddr=(item.from.displayName||"")+" <"+(item.from.emailAddress||"")+">";}if(item.to){item.to.forEach(function(r){toList+=(r.displayName||"")+" <"+(r.emailAddress||"")+">; ";});}if(item.cc){item.cc.forEach(function(r){ccList+=(r.displayName||"")+" <"+(r.emailAddress||"")+">; ";});}}catch(e){}
@@ -1128,6 +1133,7 @@
     let currentEmailBody="";
     let currentEmailDate=null;
     let currentEmailAttachments=0;
+    let sentItemsDebug="";
 
     function mkPreview(container){
       if(!getAiKey()){mkAiSetup(container);return;}
@@ -1223,6 +1229,10 @@
       };
       aiRow.appendChild(gear);
       container.appendChild(aiRow);
+      // Temporary debug: show sent items search result
+      if(sentItemsDebug){
+        container.appendChild(el("div",{fontSize:"8px",color:"#9ca3af",fontFamily:"monospace",marginBottom:"6px",wordBreak:"break-all"},{textContent:"[Sent Items: "+sentItemsDebug+"]"}));
+      }
     }
 
     function renderNew(){
